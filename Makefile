@@ -22,13 +22,15 @@ ASM_FILES := $(addprefix $(OBJ_DIR)/, $(addsuffix .s, $(SRC_NAMES)))
 
 ## FLAGS
 BASE_FLAGS := -std=c++23 -I$(SRC_DIR)
+
 # Create dependency files 
 # If header changes, trigger recompilation of dependent source files
-DEP_FLAGS := -MMD -MP
--include $(OBJ_FILES:.o=.d)
+# DEP_FLAGS := -MMD -MP
+# -include $(OBJ_FILES:.o=.d)
+#  $(OBJ_FILES): $(SRC_FILES)
 
 # Warning and Debug flags, debug flags need to be included when linking
-M ?= debug
+MODE ?= debug
 ifeq ($(M), debug)
 	DEBUG_FLAGS := -g -fsanitize=address,undefined
 	WARNING_FLAGS := -Wall -Wextra -pedantic
@@ -40,13 +42,13 @@ else ifeq ($(M), simple)
 	WARNING_FLAGS := -Wall
 endif
 
-## Debug Flag presets
-
-CXXFLAGS := $(BASE_FLAGS) $(DEBUG_FLAGS) $(WARNING_FLAGS) $(DEP_FLAGS) 
+## Debug Flag presets, AF to add flags
+AF ?=
+CXXFLAGS := $(BASE_FLAGS) $(DEBUG_FLAGS) $(WARNING_FLAGS) $(ADDFLAGS)
 LDFLAGS := -lpthread -lm $(DEBUG_FLAGS) 
 
 ## External libraries
-EXT_LIBS := sdl3
+EXT_LIBS :=
 
 # Only call pkg-config if at least one external library is specified
 ifeq ($(EXT_LIBS),)
