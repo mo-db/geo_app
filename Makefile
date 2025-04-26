@@ -5,7 +5,7 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES := streaming
+SRC_NAMES := geovt_01
 SRC_DIR := src
 OBJ_DIR := obj
 BIN_DIR := bin
@@ -44,7 +44,7 @@ endif
 
 ## Debug Flag presets, AF to add flags
 AF ?=
-CXXFLAGS := $(BASE_FLAGS) $(DEBUG_FLAGS) $(WARNING_FLAGS) $(ADDFLAGS)
+CXXFLAGS := $(BASE_FLAGS) $(DEBUG_FLAGS) $(WARNING_FLAGS) $(AF)
 LDFLAGS := -lpthread -lm $(DEBUG_FLAGS) 
 
 ## External libraries

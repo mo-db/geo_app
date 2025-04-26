@@ -13,8 +13,8 @@
 
 using namespace std;
 
-static const int gk_window_width = 640;
-static const int gk_window_height = 480;
+static const int gk_window_width = 1920*2;
+static const int gk_window_height = 1080*2;
 static const int gk_objects_max = 1000;
 static const int gk_text_buf_max = 1024;
 static const uint32_t gk_fg_color_default = 0x00000000;
@@ -78,17 +78,10 @@ int main() {
 		return 1;
 
 	uint32_t *buffer = test(app);
-	auto time_last = std::chrono::high_resolution_clock::now();
 	while(app.keep_running) {
-		if (counter++ > 50)
-			app.keep_running = 0;
+		// if (counter++ > 100)
+		// 	app.keep_running = 0;
 
-		auto time_now = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double, std::milli> 
-			dt_ms = time_now - time_last;
-		time_last = time_now;
-
-		std::cout << dt_ms << std::endl;
 		// std::cout << std::fixed << std::setprecision(12) << dt_ms << std::endl;
 
 		draw(app, buffer);
@@ -192,19 +185,44 @@ uint32_t *test(AppState &app) {
 	}	
 	return buffer;
 }
+#include <arm_neon.h> // NEON intrinsics on M1/M2
+
+void fast_fill_neon(uint32_t* dest, uint32_t value, size_t count) {
+    uint32x4_t v = vdupq_n_u32(value); // Duplicate the value into a 128-bit register (4 uint32_t)
+
+    size_t i = 0;
+    for (; i + 4 <= count; i += 4) {
+        vst1q_u32(dest + i, v); // store 4 pixels at once
+    }
+    // fill remaining
+    for (; i < count; ++i) {
+        dest[i] = value;
+    }
+}
 
 // in the objects keyword i want to have lines or circles or other stuff
 void draw(AppState &app, uint32_t *buffer) {
-	// void *pixels;
-	// int pitch;
-  // if (SDL_LockTexture(app.window_texture, NULL, &pixels, &pitch)) {
-		// // std::cout << "pitch: " << pitch << std::endl;
+	void *pixels;
+	int pitch;
+  if (SDL_LockTexture(app.window_texture, NULL, &pixels, &pitch)) {
+
+		auto t1 = std::chrono::high_resolution_clock::now();
+		// std::memset(pixels, 0xFF, 4 * app.w_pixels * app.h_pixels);
+    // fast_fill_neon((uint32_t*)pixels, 0xFFFFFF00, app.w_pixels * app.h_pixels);
+		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, 0xFF00FFFF);
 		// for (uint32_t i = 0;	i < app.w_pixels * app.h_pixels; i++) {
-			// ((uint32_t *)pixels)[i] = 0XFFFFFF00;
+		// 	((uint32_t *)pixels)[i] = 0XFFFFFF00;
 		// }	
-		// // std::memcpy(pixels, buffer, 4 * app.w_pixels * app.h_pixels);
-		// SDL_UnlockTexture(app.window_texture);
-	// }
-	// SDL_RenderTexture(app.renderer, app.window_texture, NULL, NULL);
+		auto t2 = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double, std::milli> 
+			dt_ms = t2 - t1;
+
+		std::cout << "dt: " << dt_ms << std::endl;
+
+		// std::memcpy(pixels, buffer, 4 * app.w_pixels * app.h_pixels);
+		SDL_UnlockTexture(app.window_texture);
+	}
+	SDL_RenderTexture(app.renderer, app.window_texture, NULL, NULL);
+
 	SDL_RenderPresent(app.renderer);
 }
