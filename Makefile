@@ -5,7 +5,7 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES :=
+SRC_NAMES := streaming
 SRC_DIR := src
 OBJ_DIR := obj
 BIN_DIR := bin
@@ -48,7 +48,7 @@ CXXFLAGS := $(BASE_FLAGS) $(DEBUG_FLAGS) $(WARNING_FLAGS) $(ADDFLAGS)
 LDFLAGS := -lpthread -lm $(DEBUG_FLAGS) 
 
 ## External libraries
-EXT_LIBS :=
+EXT_LIBS := sdl3
 
 # Only call pkg-config if at least one external library is specified
 ifeq ($(EXT_LIBS),)

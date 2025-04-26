@@ -191,7 +191,6 @@ int app_init(AppState *appstate) {
 	appstate->keep_running = true;
   appstate->mouse.x = 0;
   appstate->mouse.y = 0;
-  appstate->mouse.
   appstate->mouse_left_down = 0;
   appstate->mouse_right_down = 0;
 	appstate->mouse_click = false;
