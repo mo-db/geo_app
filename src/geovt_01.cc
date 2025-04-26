@@ -13,8 +13,8 @@
 
 using namespace std;
 
-static const int gk_window_width = 1920*2;
-static const int gk_window_height = 1080*2;
+static const int gk_window_width = 1920;
+static const int gk_window_height = 1080;
 static const int gk_objects_max = 1000;
 static const int gk_text_buf_max = 1024;
 static const uint32_t gk_fg_color_default = 0x00000000;
@@ -202,27 +202,37 @@ void fast_fill_neon(uint32_t* dest, uint32_t value, size_t count) {
 
 // in the objects keyword i want to have lines or circles or other stuff
 void draw(AppState &app, uint32_t *buffer) {
+	auto t1 = std::chrono::high_resolution_clock::now();
 	void *pixels;
 	int pitch;
   if (SDL_LockTexture(app.window_texture, NULL, &pixels, &pitch)) {
 
-		auto t1 = std::chrono::high_resolution_clock::now();
 		// std::memset(pixels, 0xFF, 4 * app.w_pixels * app.h_pixels);
     // fast_fill_neon((uint32_t*)pixels, 0xFFFFFF00, app.w_pixels * app.h_pixels);
+
+		auto in_t1 = std::chrono::high_resolution_clock::now();
 		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, 0xFF00FFFF);
+		auto in_t2 = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<double, std::milli> 
+			dt_ms_in = in_t2 - in_t1;
+		std::cout << "dt_ins: " << dt_ms_in << std::endl;
+
 		// for (uint32_t i = 0;	i < app.w_pixels * app.h_pixels; i++) {
 		// 	((uint32_t *)pixels)[i] = 0XFFFFFF00;
 		// }	
-		auto t2 = std::chrono::high_resolution_clock::now();
-		std::chrono::duration<double, std::milli> 
-			dt_ms = t2 - t1;
-
-		std::cout << "dt: " << dt_ms << std::endl;
-
 		// std::memcpy(pixels, buffer, 4 * app.w_pixels * app.h_pixels);
 		SDL_UnlockTexture(app.window_texture);
 	}
+
+
+
 	SDL_RenderTexture(app.renderer, app.window_texture, NULL, NULL);
+	auto t2 = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double, std::milli> 
+		dt_ms = t2 - t1;
+	std::cout << "dt_out: " << dt_ms << std::endl;
 
 	SDL_RenderPresent(app.renderer);
+
+
 }
