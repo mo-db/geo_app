@@ -12,8 +12,8 @@
 
 using namespace std;
 
-static const int gk_window_width = 1920;
-static const int gk_window_height = 1080;
+static const int gk_window_width = 1920/4;
+static const int gk_window_height = 1080/4;
 static const uint32_t gk_default_fg_color = 0x00000000;
 static const uint32_t gk_default_bg_color = 0xFFFFFFFF;
 
@@ -84,15 +84,15 @@ struct AppState {
 	uint32_t w_pixels;
 	uint32_t h_pixels;
 	bool keep_running;
-	AppMode mode;
+	AppMode mode = AppMode::NORMAL;
 
 	Point2D mouse;
   bool mouse_left_down;
   bool mouse_right_down;
 };
 
-int app_init(AppState *app);
-void process_events(AppState *app);
+int app_init(AppState &app);
+void process_events(AppState &app, Objects &objects);
 void handle_mouse_click(AppState &app, Objects &objects);
 void update(AppState &app, Objects &objects);
 void draw(AppState &app, Objects &objects);
@@ -128,11 +128,11 @@ auto create_circle(Objects &objects, Point2D &center)
 int main() {
 	AppState app;
 	Objects objects;
-	if (!app_init(&app))
+	if (!app_init(app))
 		return 1;
 
 	while(app.keep_running) {
-		process_events(&app);
+		process_events(app, objects);
 		draw(app, objects);
 		SDL_Delay(10);
 	}
@@ -209,7 +209,7 @@ void process_events(AppState &app, Objects &objects) {
 					if (!event.key.repeat) {
 						 cout << "circles:" << endl;
 						 for (auto circle : objects.circles) {
-							 cout << "(" << circle.center.x << ", " 
+							 cout << "(" << circle.center.x << ", "
 								 << circle.center.y << ")" << endl;
 						 }
 						 cout << endl;
@@ -222,11 +222,10 @@ void process_events(AppState &app, Objects &objects) {
 						 cout << endl;
 						 cout << "app mode: ";
 						 switch (app.mode) {
-							 case AppMode::NORMAL: cout << "normal" << endl;
-							 case AppMode::LINE: cout << "line" << endl;
-							 case AppMode::CIRCLE: cout << "cricle" << endl;
+							 case AppMode::NORMAL: cout << "normal" << endl; break;
+							 case AppMode::LINE: cout << "line" << endl; break;
+							 case AppMode::CIRCLE: cout << "cricle" << endl; break;
 						 }
-						 cout << endl;
 					}
 					break;
 			}
@@ -270,6 +269,7 @@ void handle_mouse_click(AppState &app, Objects &objects) {
 			circle_has_center = false;
 		}
     break;
+	}
 }
 
 // in the objects keyword i want to have lines or circles or other stuff
@@ -281,16 +281,10 @@ void draw(AppState &app, Objects &objects) {
 		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, 0xFF00FFFF);
 		SDL_UnlockTexture(app.window_texture);
 	}
-
-
-
 	SDL_RenderTexture(app.renderer, app.window_texture, NULL, NULL);
 	auto t2 = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double, std::milli> 
 		dt_ms = t2 - t1;
-	std::cout << "dt_out: " << dt_ms << std::endl;
-
+	// std::cout << "dt_out: " << dt_ms << std::endl;
 	SDL_RenderPresent(app.renderer);
-
-
 }
