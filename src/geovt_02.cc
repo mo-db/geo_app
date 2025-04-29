@@ -14,8 +14,13 @@ using namespace std;
 
 static const int gk_window_width = 1920/4;
 static const int gk_window_height = 1080/4;
-static const uint32_t gk_default_fg_color = 0x00000000;
-static const uint32_t gk_default_bg_color = 0xFFFFFFFF;
+
+// xrgb colors
+static const uint32_t gk_fg_color = 0x00000000; //black
+static const uint32_t gk_bg_color = 0x00FFFFFF; //white
+static const uint32_t gk_hl_color = 0x000000FF; //blue
+static const uint32_t gk_sel_color = 0x00FF0000; //red
+static const uint32_t gk_conceal_color = 0x006c6c6c;
 
 static bool line_under_construction = false;
 static bool circle_under_construction = false;
@@ -27,35 +32,32 @@ struct Vec2 {
 };
 
 enum struct ObjectState {
+	NORMAL,
 	HIGHLIGHTED,
 	SELECTED,
-	GHOSTED,
-	NORMAL,
+	CONCEALED,
 };
 
 // How should the destructor look here?, i need to delete is_points if possible
 struct Line2 {
 	Vec2 p1 {};
 	Vec2 p2 {};
-	uint32_t color = gk_default_fg_color;
 	vector<Vec2> is_points {};
 	ObjectState state = ObjectState::NORMAL;
 	Line2() {}
 	Line2(Vec2 p1) : p1 {p1} {}
-	Line2(Vec2 p1, Vec2 p2, uint32_t color)
-		: p1 {p1}, p2 {p2}, color {color} {}
+	Line2(Vec2 p1, Vec2 p2) : p1 {p1}, p2 {p2} {}
 };
 
 struct Circle2 {
  	Vec2 center {};
 	Vec2 circum_point {};
-	uint32_t color = gk_default_fg_color;
 	vector<Vec2> is_points {};
 	ObjectState state = ObjectState::NORMAL;
 	Circle2() {}
 	Circle2(Vec2 center) : center {center} {}
-	Circle2(Vec2 center, Vec2 circum_point, uint32_t color)
-		: center {center}, circum_point {circum_point}, color {color} {}
+	Circle2(Vec2 center, Vec2 circum_point)
+		: center {center}, circum_point {circum_point} {}
 	int radius() const {
 		return SDL_sqrt(SDL_pow((center.x - circum_point.x), 2.0) +
 														 SDL_pow((center.y - circum_point.y), 2.0));
@@ -71,6 +73,7 @@ struct Objects {
 	// all shape defining points
 	// all snap points, checked for their uniqueness
 	vector<Vec2> snap_points;
+	bool count_change;
 };
 
 // the application
@@ -98,37 +101,25 @@ struct AppState {
 
 int app_init(AppState &app);
 void process_events(AppState &app, Objects &objects);
-void reset_states(AppState &);
+void reset_states(AppState &, Objects &);
+
 void create_objects(AppState &app, Objects &objects);
+uint32_t get_color(const ObjectState &);
+
 void graphics(AppState &app, Objects &objects);
 void update(AppState &app, Objects &objects);
 void draw(AppState &app, Objects &objects);
 
-auto create_line(Objects &objects, Vec2 &p0, Vec2 &&p1, uint32_t color)
+auto create_line(Objects &objects, Vec2 &p0, Vec2 &&p1)
 {
-	objects.lines.push_back(Line2{ p0, p1, color }); // CHECK: is this valid?
+	objects.lines.push_back(Line2{ p0, p1}); // CHECK: is this valid?
 	cout << "Line Created, " << objects.lines.size() << "lines" << endl;
 	return objects.lines.end();
 }
 
-// auto create_line(Objects &objects, Vec2 &p0)
-// {
-// 	objects.lines.push_back(Line2{ p0 }); // CHECK: is this valid?
-// 	cout << "Line Created, " << objects.lines.size() << "lines" << endl;
-// 	return objects.lines.end();
-// }
-
-auto create_circle(Objects &objects, Vec2 &center,
-		Vec2 &circum_point, uint32_t color)
+auto create_circle(Objects &objects, Vec2 &center, Vec2 &circum_point)
 {
-	objects.circles.push_back(Circle2{ center, circum_point, color });
-	cout << "Circle Created, " << objects.circles.size() << "circles" << endl;
-	return objects.circles.end();
-}
-
-auto create_circle(Objects &objects, Vec2 &center)
-{
-	objects.circles.push_back(Circle2{ center});
+	objects.circles.push_back(Circle2{ center, circum_point});
 	cout << "Circle Created, " << objects.circles.size() << "circles" << endl;
 	return objects.circles.end();
 }
@@ -140,7 +131,7 @@ int main() {
 		return 1;
 
 	while(app.keep_running) {
-		reset_states(app);
+		reset_states(app, objects);
 		process_events(app, objects);
 		create_objects(app, objects);
 		graphics(app, objects);
@@ -226,9 +217,16 @@ void process_events(AppState &app, Objects &objects) {
 						 cout << endl;
 						 cout << "lines:" << endl;
 						 for (auto line : objects.lines) {
+							 string state {};
+							 switch (line.state) {
+								 case ObjectState::NORMAL: state = "NORMAL"; break;
+								 case ObjectState::HIGHLIGHTED: state = "HIGHLIGHTED"; break;
+								 case ObjectState::SELECTED: state = "SELECTED"; break;
+								 case ObjectState::CONCEALED: state = "CONCEALED"; break;
+							 }
 							 cout << "(" << line.p1.x << ", " << line.p1.y << ")"
 								 << " | " << "(" << line.p2.x << ", " << line.p2.y << ")"
-								 << endl;
+								 << " state: " << state << endl;
 						 }
 						 cout << endl;
 						 cout << "app mode: ";
@@ -255,8 +253,11 @@ void process_events(AppState &app, Objects &objects) {
 	}
 }
 
-void reset_states(AppState &app) {
+void reset_states(AppState &app, Objects &objects) {
 	app.mouse_click = false;
+	// this should somehow be automatically set for a frame where objects
+	// are created or destroyed
+	objects.count_change = false; // TODO: not good
 }
 
 void create_objects(AppState &app, Objects &objects) {
@@ -267,6 +268,7 @@ void create_objects(AppState &app, Objects &objects) {
     if (app.mouse_click) {
       if (!line_under_construction) {
         objects.lines.push_back(Line2{app.mouse});
+				objects.count_change = true;
         line_under_construction = true;
       } else {
         objects.lines.back().p2 = app.mouse;
@@ -280,6 +282,7 @@ void create_objects(AppState &app, Objects &objects) {
 		if (app.mouse_click) {
 			if (!circle_under_construction) {
 				objects.circles.push_back(Circle2 {app.mouse});
+				objects.count_change = true;
 				circle_under_construction = true;
 			} else {
 				objects.circles.back().circum_point = app.mouse;
@@ -293,6 +296,61 @@ void create_objects(AppState &app, Objects &objects) {
 }
 
 void graphics(AppState &app, Objects &objects) {
+	if (objects.count_change) {
+		// calculate intersection points for every object
+
+		// calculate global snapping points
+	}
+
+	// update object status based on mouse status and distance
+	for (auto &line : objects.lines) {
+		// perpendicular vector a
+		Vec2 a = { -(line.p2.y - line.p1.y), (line.p2.x - line.p1.x) };
+		double distance = SDL_abs((a.x * app.mouse.x + a.y * app.mouse.y +
+					(-a.x * line.p1.x - a.y * line.p1.y)) /
+				SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
+		SDL_assert(distance <= SDL_max(app.w_pixels, app.h_pixels));
+		// mouse in line area
+		if (distance < 20.0 && app.mouse.x >= line.p1.x &&
+				app.mouse.x <= line.p2.x) {
+			// line.state = ObjectState::HIGHLIGHTED;
+			if (app.mouse_click) {
+				if (line.state == ObjectState::SELECTED) {
+					line.state = ObjectState::HIGHLIGHTED;
+				} else {
+					line.state = ObjectState::SELECTED;
+				}
+			} else {
+				if (!(line.state == ObjectState::SELECTED)) {
+					line.state = ObjectState::HIGHLIGHTED;
+				}
+			}
+		// mouse not in line area
+		} else { 
+			// line.state = ObjectState::NORMAL;
+			if (!(line.state == ObjectState::SELECTED)) {
+				line.state = ObjectState::NORMAL;
+			}
+
+		}
+	}
+}
+
+uint32_t get_color(const ObjectState &state) {
+	switch (state) {
+		case ObjectState::NORMAL:
+			return gk_fg_color;
+			break;
+		case ObjectState::HIGHLIGHTED:
+			return gk_hl_color;
+			break;
+		case ObjectState::SELECTED:
+			return gk_sel_color;
+			break;
+		case ObjectState::CONCEALED:
+			return gk_conceal_color;
+			break;
+	}
 }
 
 // in the objects keyword i want to have lines or circles or other stuff
@@ -302,11 +360,11 @@ void draw(AppState &app, Objects &objects) {
 	int pitch;
   if (SDL_LockTexture(app.window_texture, NULL, &pixels, &pitch)) {
 		uint32_t *pixels_locked = (uint32_t *)pixels;
-		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, 0xFF00FFFF);
+		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, gk_bg_color);
 
 		// refactor
 		// draw lines
-		for (auto line : objects.lines) {
+		for (const auto &line : objects.lines) {
 			int x1 = SDL_lround(line.p1.x);
 			int y1 = SDL_lround(line.p1.y);
 			int x2 = SDL_lround(line.p2.x);
@@ -321,7 +379,7 @@ void draw(AppState &app, Objects &objects) {
 				y = m * (double)(x - x1) + (double)y1;
 				if (x < app.w_pixels-1 && y < app.h_pixels-1) {
 					pixels_locked[x + SDL_lround(y) * app.w_pixels]
-						= line.color;
+						= get_color(line.state);
 				}
 			}
 		}
