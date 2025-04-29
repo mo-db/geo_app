@@ -73,7 +73,6 @@ struct Objects {
 	// all shape defining points
 	// all snap points, checked for their uniqueness
 	vector<Vec2> snap_points;
-	vector<Circle2> snap_markers;
 	bool count_change;
 };
 
@@ -296,79 +295,17 @@ void create_objects(AppState &app, Objects &objects) {
 	}
 }
 
-// TODO:
-// snap points only appear when draw next object gets created
-// circle-line, circle-circle
-// only the circle marker vector to hold snap points -> i have two
-// vectors at the moment that hold the same thing
 void graphics(AppState &app, Objects &objects) {
 	if (objects.count_change) {
-
 		// calculate intersection points for every object
-		// line-line:
 		for (int i = 0; i < objects.lines.size(); i++) {
-			Line2 &base_line = objects.lines.at(i);
-			Vec2 p1 = { base_line.p1.x, base_line.p1.y };
-			Vec2 p2 = { base_line.p2.x, base_line.p2.y };
-			Vec2 a = { -(p2.y - p1.y), (p2.x - p1.x) };
 			for (int j = 0; j < objects.lines.size(); j++) {
-				if (i == j) { continue; }
-				Line2 compare_line = objects.lines.at(j);
-				Vec2 p3 = { compare_line.p1.x, compare_line.p1.y };
-				Vec2 p4 = { compare_line.p2.x, compare_line.p2.y };
-				Vec2 v = { (p4.x - p3.x), (p4.y - p3.y) };
-				Vec2 is_point {};
-				
-				// calculate the intersection
-				double t = (-(-a.x * p1.x - a.y * p1.y) - a.x * p3.x -a.y * p3.y) /
-					(a.x * v.x + a.y * v.y);
-				is_point.x = p3.x + t * v.x;
-				is_point.y = p3.y + t * v.y;
-				cout << is_point.x << ", " << is_point.y << endl;
-
-
-				// check if is_point is inside line endpoints
-				if (is_point.x >= p3.x && is_point.x <= p4.x
-						&& is_point.x >= p1.x && is_point.x <= p2.x) {
-					bool duplicate = false;
-
-					// check if intersection allready in vector
-					// need epsilon here
-					for (auto &is : base_line.is_points) {
-						if (is.x == is_point.x && is.y == is_point.y) {
-							duplicate = true;
-						}
-					}
-					if (!duplicate) {
-						base_line.is_points.push_back(is_point);
-						cout << "is point" << endl;
-					}
-				}
+				if (i == j) {}
 			}
+
 		}
-	
+
 		// calculate global snapping points
-		objects.snap_points.clear();
-		for (auto &line : objects.lines) {
-			for (auto &is_point : line.is_points) {
-				objects.snap_points.push_back(is_point);
-				cout << "snap point" << endl;
-				for (auto & snap_point : objects.snap_points) {
-					if (snap_point.x == is_point.x && snap_point.y == is_point.y) {
-						; // do nothing
-					} else {
-						objects.snap_points.push_back(is_point);
-						cout << "snap point" << endl;
-					}
-				}
-			}
-		}
-
-		// create snap markers
-		objects.snap_markers.clear();
-		for (auto &snap_point : objects.snap_points) {
-			objects.snap_markers.push_back(Circle2 {snap_point, {snap_point.x + 10, snap_point.y}});
-		}
 	}
 
 	// update object status based on mouse status and distance
@@ -483,10 +420,6 @@ void draw(AppState &app, Objects &objects) {
 
 		for (const auto &circle : objects.circles) {
 			draw_circle(app, circle, pixels_locked);
-		}
-
-		for (const auto &marker : objects.snap_markers) {
-			draw_circle(app, marker, pixels_locked);
 		}
 
 		SDL_UnlockTexture(app.window_texture);
