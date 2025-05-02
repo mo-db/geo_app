@@ -47,6 +47,10 @@ struct Line2 {
 	Line2() {}
 	Line2(Vec2 p1) : p1 {p1} {}
 	Line2(Vec2 p1, Vec2 p2) : p1 {p1}, p2 {p2} {}
+	// get the perpendiculair vector a to the line
+	Vec2 get_a() const {
+		return Vec2 {p2.y - p1.y, -(p2.x - p1.x)};
+	}
 };
 
 struct Circle2 {
@@ -110,6 +114,8 @@ uint32_t get_color(const ObjectState &);
 void graphics(AppState &app, Objects &objects);
 void update(AppState &app, Objects &objects);
 void draw(AppState &app, Objects &objects);
+
+Vec2 line_point_closest_point(const Vec2 &plane_p, const Line2 &line);
 
 auto create_line(Objects &objects, Vec2 &p0, Vec2 &&p1)
 {
@@ -296,6 +302,28 @@ void create_objects(AppState &app, Objects &objects) {
 	}
 }
 
+// Calculate closest point on a line to some point in the plane
+// I.		line_p = k * a + p
+// II.	line_p = p1 + t * (p2 - p1)
+Vec2 line_point_closest_point(const Vec2 &plane_p, const Line2 &line) {
+  Vec2 a = line.get_a();
+	Vec2 line_p {};
+  double k = ((line.p1.x * a.x + line.p1.y * a.y) -
+              (plane_p.x * a.x + plane_p.y * a.y)) /
+             (a.x * a.x + a.y * a.y);
+  line_p.x = k * a.x + plane_p.x;
+  line_p.y = k * a.y + plane_p.y;
+	return line_p;
+}
+
+// Calculate the distance of a point to the line
+double distance_point_to_line(Vec2 &plane_p, Line2 &line) {
+  Vec2 a = line.get_a();
+  return SDL_abs((a.x * plane_p.x + a.y * plane_p.y +
+                  (-a.x * line.p1.x - a.y * line.p1.y)) /
+                 SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
+}
+
 // TODO:
 // snap points only appear when draw next object gets created
 // circle-line, circle-circle
@@ -313,7 +341,7 @@ void graphics(AppState &app, Objects &objects) {
 			Vec2 a = { -(p2.y - p1.y), (p2.x - p1.x) };
 			for (int j = 0; j < objects.lines.size(); j++) {
 				if (i == j) { continue; }
-				Line2 compare_line = objects.lines.at(j);
+				Line2 &compare_line = objects.lines.at(j);
 				Vec2 p3 = { compare_line.p1.x, compare_line.p1.y };
 				Vec2 p4 = { compare_line.p2.x, compare_line.p2.y };
 				Vec2 v = { (p4.x - p3.x), (p4.y - p3.y) };
@@ -324,7 +352,7 @@ void graphics(AppState &app, Objects &objects) {
 					(a.x * v.x + a.y * v.y);
 				is_point.x = p3.x + t * v.x;
 				is_point.y = p3.y + t * v.y;
-				cout << is_point.x << ", " << is_point.y << endl;
+				// cout << is_point.x << ", " << is_point.y << endl;
 
 
 				// check if is_point is inside line endpoints
@@ -346,7 +374,54 @@ void graphics(AppState &app, Objects &objects) {
 				}
 			}
 		}
-	
+
+		// TODO: this does try on circles/lines in construction -> bug
+		// line-circle intersection
+		// Points P on line:		P = P1 + u(P2 - P1)
+		//											P = P1 + uw
+		// Points on circle:	x^2 + y^2 = r^2
+		for (int i = 0; i < objects.circles.size(); i++) {
+			Circle2 &base_circle = objects.circles.at(i);
+			base_circle.is_points.clear(); // but then i also clear circle-circle is-points
+			double radius = base_circle.radius();
+			for (int j = 0; j < objects.lines.size(); j++) {
+				Line2 &compare_line = objects.lines.at(j);
+				Vec2 p1 = { compare_line.p1.x, compare_line.p1.y };
+				Vec2 p2 = { compare_line.p2.x, compare_line.p2.y };
+
+				Vec2 a = compare_line.get_a();
+
+				// calculate distance
+				double distance = SDL_abs((a.x * base_circle.center.x + a.y * base_circle.center.y +
+					(-a.x * p1.x - a.y * p1.y)) /
+				SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
+
+				if (distance < radius) {
+					Vec2 closest_point = line_point_closest_point(base_circle.center, compare_line);
+					double hight = SDL_sqrt(SDL_abs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
+					cout << "closest_on line: " << closest_point.x << ", " << closest_point.y << endl;
+					cout << "circle center: " << base_circle.center.x << ", " << base_circle.center.y << endl;
+					cout << "distance: " << distance << endl;
+					cout << "hight: " << hight << endl;
+
+					// normalize pq
+					Vec2 pq = { p2.x - p1.x , p2.y - p1.y };
+					Vec2 pq_normal = { pq.x / SDL_sqrt(SDL_pow(pq.x, 2.0) + SDL_pow(pq.y, 2.0)),
+						pq.y / SDL_sqrt(SDL_pow(pq.x, 2.0) + SDL_pow(pq.y, 2.0)) };
+
+					Vec2 is_p1 { closest_point.x + hight * pq_normal.x, 
+						closest_point.y + hight * pq_normal.y};
+					Vec2 is_p2 { closest_point.x - hight * pq_normal.x, 
+						closest_point.y - hight * pq_normal.y};
+					base_circle.is_points.push_back(is_p1);
+					base_circle.is_points.push_back(is_p2);
+
+					cout << "is_p1: " << is_p1.x << ", " << is_p1.y << endl;
+					cout << "is points: " << base_circle.is_points.size() << endl;
+				}
+			}
+		}
+
 		// calculate global snapping points
 		objects.snap_points.clear();
 		for (auto &line : objects.lines) {
@@ -483,10 +558,22 @@ void draw(AppState &app, Objects &objects) {
 
 		for (const auto &circle : objects.circles) {
 			draw_circle(app, circle, pixels_locked);
+			for (const auto &is_point : circle.is_points) {
+				Vec2 rad_point = { is_point.x + 20, is_point.y };
+				draw_circle(app, Circle2 {is_point, rad_point}, pixels_locked); 
+			}
 		}
 
 		for (const auto &marker : objects.snap_markers) {
 			draw_circle(app, marker, pixels_locked);
+		}
+
+		for (const auto &line : objects.lines) {
+			if (line.state == ObjectState::HIGHLIGHTED) {
+				Vec2 c_center = line_point_closest_point(app.mouse, line);
+				Vec2 rad_point = { c_center.x + 20, c_center.y };
+				draw_circle(app, Circle2 {c_center, rad_point}, pixels_locked); 
+			}
 		}
 
 		SDL_UnlockTexture(app.window_texture);
