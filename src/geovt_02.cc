@@ -110,6 +110,28 @@ struct AppState {
 	bool mouse_click;
 };
 
+// each shape holds id, all snap points have list of id's of shapes
+struct Shapes {
+	vector<Line2> lines;
+	vector<Circle2> circles;
+	uint32_t id_counter {};
+
+	bool shape_under_construction;
+	void construct(AppMode mode, Vec2 &vertex); // dependent on app mode, id++
+	void clear_construction() {
+		shape_under_construction = false;
+	}
+
+	void pop_selected(AppState &app);
+	void pop_by_id(int id);
+	// void id_redist(); // if id_counter >= uint16_t max redist id's, not needed
+
+	vector<Vec2> intersection_points;
+	vector<Vec2> shape_defining_points;
+	// on object count change, recalculate snap points
+	// -> recalculate all is_points and append, take all vertex points and append
+};
+
 struct Objects {
 	vector<Line2> lines;
 	Line2 temp_line; // for construction
@@ -128,6 +150,8 @@ struct Objects {
 		line_in_construction = false;
 		circle_in_construction = false;
 	}
+
+
 
 
 	// snap points are:
