@@ -47,9 +47,28 @@ struct Line2 {
 	Line2() {}
 	Line2(Vec2 p1) : p1 {p1} {}
 	Line2(Vec2 p1, Vec2 p2) : p1 {p1}, p2 {p2} {}
+
 	// get the perpendiculair vector a to the line
-	Vec2 get_a() const {
-		return Vec2 {p2.y - p1.y, -(p2.x - p1.x)};
+	Vec2 get_a() const { return Vec2 {p2.y - p1.y, -(p2.x - p1.x)}; }
+
+	// returns the closest point on the line to some point in the plane
+	Vec2 get_point_closest_point(const Vec2 &plane_point) const {
+		Vec2 a = get_a();
+		Vec2 line_point {};
+		double k = ((p1.x * a.x + p1.y * a.y) -
+								(plane_point.x * a.x + plane_point.y * a.y)) /
+							 (a.x * a.x + a.y * a.y);
+		line_point.x = k * a.x + plane_point.x;
+		line_point.y = k * a.y + plane_point.y;
+		return line_point;
+	}
+
+	// Calculate the distance of a point to the line
+	double get_distance_to_point(Vec2 &plane_point) {
+		Vec2 a = get_a();
+		return SDL_abs((a.x * plane_point.x + a.y * plane_point.y +
+										(-a.x * p1.x - a.y * p1.y)) /
+									 SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
 	}
 };
 
@@ -66,19 +85,6 @@ struct Circle2 {
 		return SDL_sqrt(SDL_pow((center.x - circum_point.x), 2.0) +
 														 SDL_pow((center.y - circum_point.y), 2.0));
 	}
-};
-
-// struct Arc
-
-struct Objects {
-	vector<Line2> lines;
-	vector<Circle2> circles;
-	// snap points are:
-	// all shape defining points
-	// all snap points, checked for their uniqueness
-	vector<Vec2> snap_points;
-	vector<Circle2> snap_markers;
-	bool count_change;
 };
 
 // the application
@@ -102,6 +108,34 @@ struct AppState {
   bool mouse_left_down;
   bool mouse_right_down;
 	bool mouse_click;
+};
+
+struct Objects {
+	vector<Line2> lines;
+	Line2 temp_line; // for construction
+	bool line_in_construction = false;
+
+	vector<Circle2> circles;
+	Circle2 temp_circle; // for construction
+	bool circle_in_construction = false;
+
+	// arc, temp_arc, arc_in_construction, int temp_arc points
+
+	bool count_change = false;
+	void re_init() { count_change = false; }
+	void construct(AppState &app);
+	void clear_construction() {
+		line_in_construction = false;
+		circle_in_construction = false;
+	}
+
+
+	// snap points are:
+	// all shape defining points
+	// all snap points, checked for their uniqueness
+
+	vector<Vec2> snap_points;
+	vector<Circle2> snap_markers;
 };
 
 int app_init(AppState &app);
@@ -140,7 +174,13 @@ int main() {
 	while(app.keep_running) {
 		reset_states(app, objects);
 		process_events(app, objects);
-		create_objects(app, objects);
+
+		// create_objects(app, objects);
+
+		objects.re_init();
+		objects.construct(app);
+
+
 		graphics(app, objects);
 		draw(app, objects);
 		SDL_Delay(10);
@@ -201,16 +241,19 @@ void process_events(AppState &app, Objects &objects) {
         case SDLK_ESCAPE:
           if (!event.key.repeat) {
             app.mode = AppMode::NORMAL;
+						objects.clear_construction();
           }
           break;
 				case SDLK_C:
           if (!event.key.repeat) {
             app.mode = AppMode::CIRCLE;
+						objects.clear_construction();
           }
 					break;
         case SDLK_L:
           if (!event.key.repeat) {
             app.mode = AppMode::LINE;
+						objects.clear_construction();
           }
           break;
 
@@ -267,36 +310,75 @@ void reset_states(AppState &app, Objects &objects) {
 	objects.count_change = false; // TODO: not good
 }
 
+void Objects::construct(AppState &app) {
+  switch (app.mode) {
+  case AppMode::NORMAL:
+    break;
+  case AppMode::LINE:
+		if (app.mouse_click) {
+      if (!line_in_construction) {
+				temp_line.p1 = app.mouse;
+        line_in_construction = true;
+			} else {
+				temp_line.p2 = app.mouse;
+        lines.push_back(temp_line);
+				count_change = true;
+        line_in_construction = false;
+			}
+		} else if (line_in_construction) {
+			temp_line.p2 = app.mouse;
+		}
+    break;
+	case AppMode::CIRCLE:
+		if (app.mouse_click) {
+      if (!circle_in_construction) {
+				temp_circle.center = app.mouse;
+        circle_in_construction = true;
+			} else {
+				temp_circle.circum_point = app.mouse;
+        circles.push_back(temp_circle);
+        circle_in_construction = false;
+			}
+		} else if (circle_in_construction) {
+			temp_circle.circum_point = app.mouse;
+		}
+    break;
+	}
+}
+
+
+// Objects::construct
 void create_objects(AppState &app, Objects &objects) {
   switch (app.mode) {
   case AppMode::NORMAL:
     break;
   case AppMode::LINE:
-    if (app.mouse_click) {
-      if (!line_under_construction) {
-        objects.lines.push_back(Line2{app.mouse});
+		if (app.mouse_click) {
+      if (!objects.line_in_construction) {
+				objects.temp_line.p1 = app.mouse;
+        objects.line_in_construction = true;
+			} else {
+				objects.temp_line.p2 = app.mouse;
+        objects.lines.push_back(objects.temp_line);
 				objects.count_change = true;
-        line_under_construction = true;
-      } else {
-        objects.lines.back().p2 = app.mouse;
-        line_under_construction = false;
-      }
-    } else if (line_under_construction) {
-      objects.lines.back().p2 = app.mouse;
-    }
+        objects.line_in_construction = false;
+			}
+		} else if (objects.line_in_construction) {
+			objects.temp_line.p2 = app.mouse;
+		}
     break;
 	case AppMode::CIRCLE:
 		if (app.mouse_click) {
-			if (!circle_under_construction) {
-				objects.circles.push_back(Circle2 {app.mouse});
-				objects.count_change = true;
-				circle_under_construction = true;
+      if (!objects.circle_in_construction) {
+				objects.temp_circle.center = app.mouse;
+        objects.circle_in_construction = true;
 			} else {
-				objects.circles.back().circum_point = app.mouse;
-				circle_under_construction = false;
+				objects.temp_circle.circum_point = app.mouse;
+        objects.circles.push_back(objects.temp_circle);
+        objects.circle_in_construction = false;
 			}
-		} else if (circle_under_construction) {
-			objects.circles.back().circum_point = app.mouse;
+		} else if (objects.circle_in_construction) {
+			objects.temp_circle.circum_point = app.mouse;
 		}
     break;
 	}
@@ -574,6 +656,14 @@ void draw(AppState &app, Objects &objects) {
 				Vec2 rad_point = { c_center.x + 20, c_center.y };
 				draw_circle(app, Circle2 {c_center, rad_point}, pixels_locked); 
 			}
+		}
+
+		if (objects.line_in_construction) {
+			draw_line(app, objects.temp_line, pixels_locked);
+		}
+
+		if (objects.circle_in_construction) {
+			draw_circle(app, objects.temp_circle, pixels_locked);
 		}
 
 		SDL_UnlockTexture(app.window_texture);
