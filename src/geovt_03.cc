@@ -455,6 +455,7 @@ void graphics(AppState &app, Shapes &shapes) {
 			Circle2 &base_circle = shapes.circles.at(i);
 			double radius = base_circle.radius();
 			for (int j = 0; j < shapes.lines.size(); j++) {
+				if (i == j) { continue; }
 				Line2 &compare_line = shapes.lines.at(j);
 				Vec2 p1 = { compare_line.p1.x, compare_line.p1.y };
 				Vec2 p2 = { compare_line.p2.x, compare_line.p2.y };
@@ -500,6 +501,47 @@ void graphics(AppState &app, Shapes &shapes) {
 			}
 		}
 	}
+
+	for (int i = 0; i < shapes.circles.size(); i++) {
+		Circle2 &base_circle = shapes.circles.at(i);
+		for (int j = i+1; j < shapes.circles.size(); j++) {
+			// if (i == j) { continue; }
+			Circle2 &compare_circle = shapes.circles.at(j);
+			double d =
+					get_point_point_distance(base_circle.center, compare_circle.center);
+			if (d < (base_circle.radius() + compare_circle.radius())) {
+				double base_meet_distance =
+						(SDL_pow(base_circle.radius(), 2.0) -
+						 SDL_pow(compare_circle.radius(), 2.0) + SDL_pow(d, 2.0)) /
+						(2 * d);
+				double h = SDL_sqrt(SDL_pow(base_circle.radius(), 2.0) -
+														SDL_pow(base_meet_distance, 2.0));
+
+				// TODO: all this need to be functions 
+				Vec2 v = { (compare_circle.center.x - base_circle.center.x), 
+										(compare_circle.center.y - base_circle.center.y) };
+				Vec2 v_normal = { v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
+					v.y / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)) };
+
+				Vec2 a_normal = { v_normal.y, -v_normal.x };
+
+				Vec2 meet_point = { base_circle.center.x + v_normal.x * base_meet_distance,
+					base_circle.center.y + v_normal.y * base_meet_distance };
+
+				Vec2 is_p1 = { meet_point.x + h * a_normal.x, meet_point.y + h * a_normal.y };
+				Vec2 is_p2 = { meet_point.x - h * a_normal.x, meet_point.y - h * a_normal.y };
+				// cout << "is_p1: " << is_p1.x << ", " << is_p1.y << endl;
+			  // cout << "is_p2: " << is_p2.x << ", " << is_p2.y << endl;
+				id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
+				id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
+			}
+		}
+	}
+	cout << "is points: " << endl;
+	for (auto &id_point : shapes.intersection_points) {
+		cout << id_point.p.x << ", " << id_point.p.y << " ";
+	}
+	cout << endl;
 
 	// update object status based on mouse status and distance
 	for (auto &line : shapes.lines) {
@@ -665,7 +707,7 @@ void draw(AppState &app, Shapes &shapes) {
 				double distance = get_point_point_distance(circle.center, app.mouse);
 				if (distance < circle.radius() + shapes.snap_distance &&
 						distance > circle.radius() - shapes.snap_distance) {
-					//normalize 
+					//normalize
 					Vec2 v = {app.mouse.x - circle.center.x,
 										app.mouse.y - circle.center.y};
 					Vec2 v_normal = {v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
