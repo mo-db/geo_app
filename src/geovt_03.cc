@@ -40,7 +40,7 @@ enum struct ShapeState {
 struct Line2 {
 	Vec2 p1 {};
 	Vec2 p2 {};
-	uint32_t id;
+	uint32_t id {};
 	ShapeState state = ShapeState::NORMAL;
 	Line2() {}
 	Line2(Vec2 p1) : p1 {p1} {}
@@ -73,7 +73,7 @@ struct Line2 {
 struct Circle2 {
  	Vec2 center {};
 	Vec2 circum_point {};
-	uint32_t id;
+	uint32_t id {};
 	ShapeState state = ShapeState::NORMAL;
 	Circle2() {}
 	Circle2(Vec2 center) : center {center} {}
@@ -148,6 +148,10 @@ struct Shapes {
 	uint32_t id_counter {};
 	bool quantity_change = false;
 
+	Vec2 snap_point {};
+	double snap_distance = 20.0;
+	bool in_snap_distance = false;
+
 	bool line_in_construction;
 	bool circle_in_construction;
 	void construct(AppState &, Vec2 &point); // dependent on app mode, id++
@@ -185,8 +189,6 @@ void graphics(AppState &app, Shapes &shapes);
 void update(AppState &app, Shapes &shapes);
 void draw(AppState &app, Shapes &shapes);
 
-Vec2 line_point_closest_point(const Vec2 &plane_p, const Line2 &line);
-
 auto create_line(Shapes &shapes, Vec2 &p0, Vec2 &&p1)
 {
 	shapes.lines.push_back(Line2{ p0, p1}); // CHECK: is this valid?
@@ -212,7 +214,11 @@ int main() {
 		app.frame_reset();
 		process_events(app, shapes);
 
-		shapes.construct(app, app.mouse);
+		if (shapes.in_snap_distance) {
+			shapes.construct(app, shapes.snap_point);
+		} else {
+			shapes.construct(app, app.mouse);
+		}
 
 		graphics(app, shapes);
 		draw(app, shapes);
@@ -374,6 +380,31 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 	}
 }
 
+// test if point and its id allready in id_points vector 
+// if not append or add id
+void id_point_maybe_append(vector<IdPoint> &id_points, Vec2 &point,
+                           uint32_t shape_id) {
+  bool point_dup = false;
+  for (auto &id_point : id_points) {
+    if (id_point.p.x == point.x && id_point.p.y == point.y) {
+      point_dup = true;
+      bool id_dup = false;
+      for (auto &id : id_point.ids) {
+        if (shape_id == id) {
+          id_dup = true;
+        }
+      }
+      if (!id_dup) {
+        id_point.ids.push_back(shape_id);
+      }
+    }
+  }
+  if (!point_dup) {
+    id_points.push_back(IdPoint{point, shape_id});
+  }
+}
+
+
 // TODO:
 // snap points only appear when draw next object gets created
 // circle-line, circle-circle
@@ -408,42 +439,20 @@ void graphics(AppState &app, Shapes &shapes) {
 
 
 				// check if is_point is inside line endpoints
-				if (is_point.x >= p3.x && is_point.x <= p4.x
-						&& is_point.x >= p1.x && is_point.x <= p2.x) {
-					bool duplicate = false;
-
-					// check if intersection allready in vector
-					for (auto &is : shapes.intersection_points) {
-						if (is.p.x == is_point.x && is.p.y == is_point.y) {
-							duplicate = true;
-							bool id_dup = false;
-							for (auto &id : is.ids) {
-								if (id == base_line.id) {
-									id_dup = true;
-								}
-							}
-							if (!id_dup) {
-								is.ids.push_back(base_line.id);
-							}
-						}
-					}
-					if (!duplicate) {
-						shapes.intersection_points.push_back(IdPoint{ is_point, 
-																													base_line.id });
-						cout << "is point" << endl;
-					}
+				if (is_point.x >= p1.x && is_point.x <= p2.x) {
+					id_point_maybe_append(shapes.intersection_points, is_point, base_line.id);
 				}
 			}
 		}
 
-		// TODO: this does try on circles/lines in construction -> bug
 		// line-circle intersection
+		// TODO: check if between segment endpoints
+		//
 		// Points P on line:		P = P1 + u(P2 - P1)
 		//											P = P1 + uw
 		// Points on circle:	x^2 + y^2 = r^2
 		for (int i = 0; i < shapes.circles.size(); i++) {
 			Circle2 &base_circle = shapes.circles.at(i);
-			base_circle.is_points.clear(); // but then i also clear circle-circle is-points
 			double radius = base_circle.radius();
 			for (int j = 0; j < shapes.lines.size(); j++) {
 				Line2 &compare_line = shapes.lines.at(j);
@@ -458,7 +467,7 @@ void graphics(AppState &app, Shapes &shapes) {
 				SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
 
 				if (distance < radius) {
-					Vec2 closest_point = line_point_closest_point(base_circle.center, compare_line);
+					Vec2 closest_point = compare_line.get_point_closest_point(base_circle.center);
 					double hight = SDL_sqrt(SDL_abs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
 					cout << "closest_on line: " << closest_point.x << ", " << closest_point.y << endl;
 					cout << "circle center: " << base_circle.center.x << ", " << base_circle.center.y << endl;
@@ -474,14 +483,23 @@ void graphics(AppState &app, Shapes &shapes) {
 						closest_point.y + hight * pq_normal.y};
 					Vec2 is_p2 { closest_point.x - hight * pq_normal.x, 
 						closest_point.y - hight * pq_normal.y};
-					base_circle.is_points.push_back(is_p1);
-					base_circle.is_points.push_back(is_p2);
 
-					cout << "is_p1: " << is_p1.x << ", " << is_p1.y << endl;
-					cout << "is points: " << base_circle.is_points.size() << endl;
+					// cout << "is_p1: " << is_p1.x << ", " << is_p1.y << endl;
+					// cout << "is points: " << base_circle.is_points.size() << endl;
+					// cout << "is point" << endl;
+					
+					// TODO: linde problem only on direction
+					if (is_p1.x >= p1.x && is_p1.x <= p2.x) {
+						id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
+					}
+
+					if (is_p2.x >= p1.x && is_p2.x <= p2.x) {
+						id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
+					}
 				}
 			}
 		}
+	}
 
 	// update object status based on mouse status and distance
 	for (auto &line : shapes.lines) {
@@ -597,69 +615,72 @@ void draw(AppState &app, Shapes &shapes) {
 			draw_circle(app, circle, pixels_locked);
 		}
 
+
 		// draw circle around all intersetion points
 		for (const auto &is_point : shapes.intersection_points) {
-			Vec2 rad_point = { is_point.x + 20, is_point.y };
-			draw_circle(app, Circle2 {is_point, rad_point}, pixels_locked); 
+			Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
+			// draw_circle(app, Circle2 {is_point.p, rad_point}, pixels_locked); 
 		}
 		// draw circle around all shape points 
 		for (const auto &shape_point : shapes.shape_defining_points) {
-			Vec2 rad_point = { shape_point.x + 20, shape_point.y };
-			draw_circle(app, Circle2 {shape_point, rad_point}, pixels_locked); 
+			Vec2 rad_point = { shape_point.p.x + 20, shape_point.p.y };
+			// draw_circle(app, Circle2 {shape_point.p, rad_point}, pixels_locked); 
 		}
 
 
 		// draw circle live if close
-		double snap_distance = 20.0;
-		bool snap_point_set = false;
-		Vec2 snap_point {};
-		if (!snap_point_set) {
+		shapes.in_snap_distance = false;
+		if (!shapes.in_snap_distance) {
 			for (auto &is_point : shapes.intersection_points) {
-				if (get_point_point_distance(is_point, app.mouse) > snap_distance) {
-					snap_point = is_point;
-					snap_point_set = true;
+				if (get_point_point_distance(is_point.p, app.mouse) < shapes.snap_distance) {
+					shapes.snap_point = is_point.p;
+					shapes.in_snap_distance = true;
 				}	
 			}
 		}
 
-		if (!snap_point_set) {
+		if (!shapes.in_snap_distance) {
 			for (auto &shape_point : shapes.shape_defining_points) {
-				if (get_point_point_distance(shape_point, app.mouse) > snap_distance) {
-					snap_point = shape_point;
-					snap_point_set = true;
+				if (get_point_point_distance(shape_point.p, app.mouse) < shapes.snap_distance) {
+					shapes.snap_point = shape_point.p;
+					shapes.in_snap_distance = true;
 					break;
 				}
 			}
 		}
 
-		if (!snap_point_set) {
+		if (!shapes.in_snap_distance) {
 			for (auto &line : shapes.lines) {
-				if (line.get_distance_to_point(app.mouse) < snap_distance) {
-					snap_point = line_point_closest_point(app.mouse, line);
-					snap_point_set = true;
+				if (line.get_distance_to_point(app.mouse) < shapes.snap_distance) {
+					shapes.snap_point = line.get_point_closest_point(app.mouse);
+					shapes.in_snap_distance = true;
 					break;
 				}
 			}
 		}
 
-		if (!snap_point_set) {
+		// TODO: not working
+		if (!shapes.in_snap_distance) {
 			for (auto &circle : shapes.circles) {
-				if (get_point_point_distance(circle.center, app.mouse) < snap_distance) {
+				double distance = get_point_point_distance(circle.center, app.mouse);
+				if (distance < circle.radius() + shapes.snap_distance &&
+						distance > circle.radius() - shapes.snap_distance) {
 					//normalize 
 					Vec2 v = {app.mouse.x - circle.center.x,
 										app.mouse.y - circle.center.y};
 					Vec2 v_normal = {v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
 													v.y / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0))};
-					snap_point = { (circle.center.x + circle.radius() * v_normal.x),
+					shapes.snap_point = { (circle.center.x + circle.radius() * v_normal.x),
 						circle.center.y + circle.radius() * v_normal.y };
+					shapes.in_snap_distance = true;
 					break;
 				}
 			}
 		}
 
 		// draw snap circle
-		Vec2 rad_point = { snap_point.x + 20, snap_point.y };
-		draw_circle(app, Circle2 {snap_point, rad_point}, pixels_locked); 
+		Vec2 rad_point = { shapes.snap_point.x + 20, shapes.snap_point.y };
+		draw_circle(app, Circle2 {shapes.snap_point, rad_point}, pixels_locked); 
 
 
 

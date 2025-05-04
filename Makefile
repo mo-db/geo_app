@@ -5,7 +5,7 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES := geovt_02
+SRC_NAMES := geovt_03
 SRC_DIR := src
 OBJ_DIR := obj
 BIN_DIR := bin
