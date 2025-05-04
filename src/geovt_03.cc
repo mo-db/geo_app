@@ -4,6 +4,9 @@
 #include <chrono>
 #include <cassert>
 #include <cstring>
+#include <cmath>
+#include <algorithm>
+#include <fstream>
 #include <SDL3/SDL.h>
 
 // INFO: use default arguments for functions like create_circle(default color)
@@ -64,7 +67,7 @@ struct Line2 {
 	// Calculate the distance of a point to the line
 	double get_distance_to_point(Vec2 &plane_point) {
 		Vec2 a = get_a();
-		return SDL_abs((a.x * plane_point.x + a.y * plane_point.y +
+		return SDL_fabs((a.x * plane_point.x + a.y * plane_point.y +
 										(-a.x * p1.x - a.y * p1.y)) /
 									 SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
 	}
@@ -173,8 +176,8 @@ struct Shapes {
 };
 
 double get_point_point_distance(Vec2 &p1, Vec2 &p2) {
-  return SDL_sqrt(SDL_pow(SDL_abs(p2.x - p1.x), 2.0) +
-                  SDL_pow(SDL_abs(p2.y - p1.y), 2.0));
+  return SDL_sqrt(SDL_pow(SDL_fabs(p2.x - p1.x), 2.0) +
+                  SDL_pow(SDL_fabs(p2.y - p1.y), 2.0));
 }
 
 
@@ -188,6 +191,7 @@ uint32_t get_color(const ShapeState &);
 void graphics(AppState &app, Shapes &shapes);
 void update(AppState &app, Shapes &shapes);
 void draw(AppState &app, Shapes &shapes);
+vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle);
 
 auto create_line(Shapes &shapes, Vec2 &p0, Vec2 &&p1)
 {
@@ -295,7 +299,26 @@ void process_events(AppState &app, Shapes &shapes) {
 						shapes.clear_construction();
           }
           break;
+				case SDLK_Y:
+					if (!event.key.repeat) {
+						std::ofstream outf{ "Sample.txt" };
+						vector<double> relations {};
+						for (auto &circle : shapes.circles) {
+							if (circle.state == ShapeState::SELECTED) {
+								relations = get_circle_angle_relations(app, shapes, circle);
+							}
+						}
+						double addup {};
+						for (auto &relation : relations) {
+							cout << relation << ", ";
+							addup += relation;
+							outf << relation << " ";
+						}
+						cout << endl;
+						cout << "addup: " << addup << endl;
 
+					}
+					break;
 				case SDLK_P:
 					if (!event.key.repeat) {
 						 cout << "circles:" << endl;
@@ -463,13 +486,13 @@ void graphics(AppState &app, Shapes &shapes) {
 				Vec2 a = compare_line.get_a();
 
 				// calculate distance
-				double distance = SDL_abs((a.x * base_circle.center.x + a.y * base_circle.center.y +
+				double distance = SDL_fabs((a.x * base_circle.center.x + a.y * base_circle.center.y +
 					(-a.x * p1.x - a.y * p1.y)) /
 				SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
 
 				if (distance < radius) {
 					Vec2 closest_point = compare_line.get_point_closest_point(base_circle.center);
-					double hight = SDL_sqrt(SDL_abs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
+					double hight = SDL_sqrt(SDL_fabs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
 					cout << "closest_on line: " << closest_point.x << ", " << closest_point.y << endl;
 					cout << "circle center: " << base_circle.center.x << ", " << base_circle.center.y << endl;
 					cout << "distance: " << distance << endl;
@@ -537,17 +560,39 @@ void graphics(AppState &app, Shapes &shapes) {
 			}
 		}
 	}
-	cout << "is points: " << endl;
-	for (auto &id_point : shapes.intersection_points) {
-		cout << id_point.p.x << ", " << id_point.p.y << " ";
+	// TODO: print
+	// cout << "is points: " << endl;
+	// for (auto &id_point : shapes.intersection_points) {
+	// 	cout << id_point.p.x << ", " << id_point.p.y << " ";
+	// }
+	// cout << endl;
+
+	for (auto &line : shapes.lines) {
+		id_point_maybe_append(shapes.shape_defining_points, line.p1, line.id);
+		id_point_maybe_append(shapes.shape_defining_points, line.p2, line.id);
 	}
-	cout << endl;
+	for (auto &circle : shapes.circles) {
+		id_point_maybe_append(shapes.shape_defining_points, circle.center, circle.id);
+	}
+	
+	for (auto &circle : shapes.circles) {
+		double d = get_point_point_distance(app.mouse, circle.center);
+		if (d < circle.radius() + 20.0 && d > circle.radius() - 20.0) {
+			if(app.mode == AppMode::NORMAL && app.mouse_click) {
+				if (circle.state == ShapeState::SELECTED) {
+					circle.state = ShapeState::NORMAL;
+				} else {
+					circle.state = ShapeState::SELECTED;
+				}
+			}
+		}
+	}
 
 	// update object status based on mouse status and distance
 	for (auto &line : shapes.lines) {
 		// perpendicular vector a
 		Vec2 a = { -(line.p2.y - line.p1.y), (line.p2.x - line.p1.x) };
-		double distance = SDL_abs((a.x * app.mouse.x + a.y * app.mouse.y +
+		double distance = SDL_fabs((a.x * app.mouse.x + a.y * app.mouse.y +
 					(-a.x * line.p1.x - a.y * line.p1.y)) /
 				SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
 		SDL_assert(distance <= SDL_max(app.w_pixels, app.h_pixels));
@@ -572,7 +617,6 @@ void graphics(AppState &app, Shapes &shapes) {
 			if (!(line.state == ShapeState::SELECTED)) {
 				line.state = ShapeState::NORMAL;
 			}
-
 		}
 	}
 }
@@ -592,6 +636,68 @@ uint32_t get_color(const ShapeState &state) {
 			return gk_conceal_color;
 			break;
 	}
+}
+
+vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle) {
+	vector<Vec2> points {};
+	vector<Vec2> pos_y {};
+	vector<Vec2> neg_y {};
+	vector<Vec2> angle_points{};
+	vector<double> angle_relations{};
+
+	// get all is_points on the circle
+	for (auto &id_point : shapes.intersection_points) {
+		bool id_found = false;
+		for (auto &id : id_point.ids) {
+			if (id == circle.id) {
+				id_found = true;
+				cout << "id found" << endl;
+			}
+		}
+		if (id_found) {
+			points.push_back(id_point.p);
+		}
+	}
+
+	// fill vectors for upper and lower part of the circle
+	for (auto &point : points) {
+		if (point.y <= circle.center.y) {
+			pos_y.push_back(point);
+		} else {
+			neg_y.push_back(point);
+		}
+	}
+
+	// sort
+	std::sort(pos_y.begin(), pos_y.end(), [](Vec2 &p1, Vec2 &p2){
+			return p1.x > p2.x;});
+	std::sort(neg_y.begin(), neg_y.end(), [](Vec2 &p1, Vec2 &p2){
+			return p1.x < p2.x;});
+
+	for (auto &point : pos_y) {
+		cout << point.x << "," << point.y << " ";
+	}
+	cout << endl;
+	for (auto &point : neg_y) {
+		cout << point.x << "," << point.y << " ";
+	}
+	cout << endl;
+
+	angle_points.insert(angle_points.end(), pos_y.begin(), pos_y.end());
+	angle_points.insert(angle_points.end(), neg_y.begin(), neg_y.end());
+	angle_points.push_back(angle_points.front());
+
+	for (int i = 0; i < angle_points.size() - 1; i++) {
+		Vec2 p1 = angle_points.at(i);
+		Vec2 p2 = angle_points.at(i + 1);
+		double d = get_point_point_distance(p1, p2);
+		cout << "distances:" << endl;
+		cout << d << " ";
+		double angle = std::acos((2 * SDL_pow(circle.radius(), 2.0) - SDL_pow(d, 2.0)) /
+														 (2 * SDL_pow(circle.radius(), 2.0)));
+		angle_relations.push_back(angle);
+	}
+	return angle_relations;
 }
 
 void draw_line(AppState &app, const Line2 &line, uint32_t *pixel_buf) {
