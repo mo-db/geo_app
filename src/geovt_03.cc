@@ -109,8 +109,11 @@ struct AppState {
   bool mouse_left_down = false;
   bool mouse_right_down = false;
 	bool mouse_click = false;
+	bool shift_set = false;
 
-	void frame_reset() { mouse_click = false; };
+	void frame_reset() { 
+		mouse_click = false;
+	};
 };
 
 string state_to_string(ShapeState &state) {
@@ -163,7 +166,9 @@ struct Shapes {
 		circle_in_construction = false;
 	}
 
-	void frame_reset() { quantity_change = false; }
+	void frame_reset() { 
+		quantity_change = false;
+	}
 
 	void pop_selected(AppState &app);
 	void pop_by_id(int id);
@@ -178,6 +183,12 @@ struct Shapes {
 double get_point_point_distance(Vec2 &p1, Vec2 &p2) {
   return SDL_sqrt(SDL_pow(SDL_fabs(p2.x - p1.x), 2.0) +
                   SDL_pow(SDL_fabs(p2.y - p1.y), 2.0));
+}
+
+Vec2 vec2_normalize(Vec2 &v) {
+	Vec2 v_normal = { v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
+			v.y / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)) };
+	return v_normal;
 }
 
 
@@ -279,6 +290,16 @@ void process_events(AppState &app, Shapes &shapes) {
     case SDL_EVENT_QUIT:
       app.keep_running = false;
       break;
+		case SDL_EVENT_KEY_UP:
+			switch(event.key.key) {
+				case SDLK_LSHIFT:
+					cout << "unset" << endl;
+					if (!event.key.repeat) {
+						app.shift_set = false;
+					}
+					break;
+			}
+			break;
 		case SDL_EVENT_KEY_DOWN:
 			switch(event.key.key) {
         case SDLK_ESCAPE:
@@ -287,6 +308,12 @@ void process_events(AppState &app, Shapes &shapes) {
 						shapes.clear_construction();
           }
           break;
+				case SDLK_LSHIFT:
+					if (!event.key.repeat) {
+						cout << "set" << endl;
+						app.shift_set = true;
+					}
+					break;
 				case SDLK_C:
           if (!event.key.repeat) {
             app.mode = AppMode::CIRCLE;
@@ -365,6 +392,14 @@ void process_events(AppState &app, Shapes &shapes) {
 	}
 }
 
+Vec2 get_point_from_last_radius(Vec2 &point, double last_radius, Circle2 &temp_circle) {
+		Vec2 v = { point.x - temp_circle.center.x, point.y - temp_circle.center.y };
+		Vec2 v_normal = vec2_normalize(v);
+		Vec2 circum_point = { temp_circle.center.x + v_normal.x * last_radius,
+			temp_circle.center.y + v_normal.y * last_radius };
+		return circum_point;
+}
+
 void Shapes::construct(AppState &app, Vec2 &point) {
   switch (app.mode) {
   case AppMode::NORMAL:
@@ -391,13 +426,40 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 				temp_circle.center = point;
         circle_in_construction = true;
 			} else {
-				temp_circle.circum_point = point;
+				if (app.shift_set) {
+					cout << "set" << endl;
+					double last_radius {};
+					for (auto &circle : circles) {
+						if (circle.state == ShapeState::SELECTED) {
+							last_radius = circle.radius();
+						}
+					}
+					temp_circle.circum_point = get_point_from_last_radius(point, last_radius, temp_circle);
+				} else {
+					cout << "not set" << endl;
+					temp_circle.circum_point = point;
+				}
+
 				temp_circle.id = id_counter++;
         circles.push_back(temp_circle);
         circle_in_construction = false;
 			}
 		} else if (circle_in_construction) {
-			temp_circle.circum_point = point;
+			// if i wanna have this to work for last selected shape
+			// i probably have to put selected shapes into a vector instead of status
+			if (app.shift_set) {
+				cout << "set" << endl;
+				double last_radius {};
+				for (auto &circle : circles) {
+					if (circle.state == ShapeState::SELECTED) {
+						last_radius = circle.radius();
+					}
+				}
+				temp_circle.circum_point = get_point_from_last_radius(point, last_radius, temp_circle);
+			} else {
+				cout << "not set" << endl;
+				temp_circle.circum_point = point;
+			}
 		}
     break;
 	}
