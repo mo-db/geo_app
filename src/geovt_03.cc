@@ -31,6 +31,10 @@ static const double gk_epsilon = 0.00001;
 struct Vec2 {
 	double x {};
 	double y {};
+	Vec2 normalize(Vec2 &v) {
+		return { v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
+			v.y / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)) };
+	}
 };
 
 enum struct ShapeState {
@@ -508,8 +512,7 @@ void graphics(AppState &app, Shapes &shapes) {
 		shapes.intersection_points.clear();
 		shapes.shape_defining_points.clear();
 
-		// calculate intersection points for every object
-		// line-line:
+		// [line-line intersections]
 		for (int i = 0; i < shapes.lines.size(); i++) {
 			Line2 &base_line = shapes.lines.at(i);
 			Vec2 p1 = { base_line.p1.x, base_line.p1.y };
@@ -528,45 +531,29 @@ void graphics(AppState &app, Shapes &shapes) {
 					(a.x * v.x + a.y * v.y);
 				is_point.x = p3.x + t * v.x;
 				is_point.y = p3.y + t * v.y;
-				// cout << is_point.x << ", " << is_point.y << endl;
 
-
-				// check if is_point is inside line endpoints
-				if (is_point.x >= p1.x && is_point.x <= p2.x) {
-					id_point_maybe_append(shapes.intersection_points, is_point, base_line.id);
-				}
+				id_point_maybe_append(shapes.intersection_points, is_point, base_line.id);
 			}
 		}
 
-		// line-circle intersection
-		// TODO: check if between segment endpoints
-		//
-		// Points P on line:		P = P1 + u(P2 - P1)
-		//											P = P1 + uw
-		// Points on circle:	x^2 + y^2 = r^2
+		// [line-circle intersections]
+		// TODO: no rule for line tangent to circle
+		// TODO: stop at line endpoints
 		for (int i = 0; i < shapes.circles.size(); i++) {
 			Circle2 &base_circle = shapes.circles.at(i);
 			double radius = base_circle.radius();
 			for (int j = 0; j < shapes.lines.size(); j++) {
-				if (i == j) { continue; }
 				Line2 &compare_line = shapes.lines.at(j);
 				Vec2 p1 = { compare_line.p1.x, compare_line.p1.y };
 				Vec2 p2 = { compare_line.p2.x, compare_line.p2.y };
 
 				Vec2 a = compare_line.get_a();
 
-				// calculate distance
-				double distance = SDL_fabs((a.x * base_circle.center.x + a.y * base_circle.center.y +
-					(-a.x * p1.x - a.y * p1.y)) /
-				SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
+				double distance = compare_line.get_distance_to_point(base_circle.center);
 
 				if (distance < radius) {
 					Vec2 closest_point = compare_line.get_point_closest_point(base_circle.center);
 					double hight = SDL_sqrt(SDL_fabs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
-					cout << "closest_on line: " << closest_point.x << ", " << closest_point.y << endl;
-					cout << "circle center: " << base_circle.center.x << ", " << base_circle.center.y << endl;
-					cout << "distance: " << distance << endl;
-					cout << "hight: " << hight << endl;
 
 					// normalize pq
 					Vec2 pq = { p2.x - p1.x , p2.y - p1.y };
@@ -578,29 +565,17 @@ void graphics(AppState &app, Shapes &shapes) {
 					Vec2 is_p2 { closest_point.x - hight * pq_normal.x, 
 						closest_point.y - hight * pq_normal.y};
 
-					// cout << "is_p1: " << is_p1.x << ", " << is_p1.y << endl;
-					// cout << "is points: " << base_circle.is_points.size() << endl;
-					// cout << "is point" << endl;
-					
-					// TODO: linde problem only on direction
-					// here i test if the point is inside the line??
 
 					id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
 					id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
-					if (is_p1.x >= p1.x && is_p1.x <= p2.x) {
-						cout << "append ?" << endl;
-						id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
-					}
-
-					if (is_p2.x >= p1.x && is_p2.x <= p2.x) {
-						cout << "append ?" << endl;
-						id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
-					}
 				}
 			}
 		}
 	}
 
+	// [circle-circle intersections]
+	// TODO: breaks for circle inside circle
+	// TODO: no rule for touching in one point
 	for (int i = 0; i < shapes.circles.size(); i++) {
 		Circle2 &base_circle = shapes.circles.at(i);
 		for (int j = i+1; j < shapes.circles.size(); j++) {
@@ -620,8 +595,7 @@ void graphics(AppState &app, Shapes &shapes) {
 				// TODO: all this need to be functions 
 				Vec2 v = { (compare_circle.center.x - base_circle.center.x), 
 										(compare_circle.center.y - base_circle.center.y) };
-				Vec2 v_normal = { v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
-					v.y / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)) };
+				Vec2 v_normal = v.normalize(v);
 
 				Vec2 a_normal = { v_normal.y, -v_normal.x };
 
@@ -631,33 +605,13 @@ void graphics(AppState &app, Shapes &shapes) {
 				Vec2 is_p1 = { meet_point.x + h * a_normal.x, meet_point.y + h * a_normal.y };
 				Vec2 is_p2 = { meet_point.x - h * a_normal.x, meet_point.y - h * a_normal.y };
 
-
-				// project is_point back onto circle, doesnt really help
-				// Vec2 u1 = { is_p1.x - base_circle.center.x, is_p1.y - base_circle.center.y };
-				// Vec2 u2 = { is_p2.x - base_circle.center.x, is_p2.y - base_circle.center.y };
-				// Vec2 u1_norm = vec2_normalize(u1);
-				// Vec2 u2_norm = vec2_normalize(u2);
-
-				// Vec2 is_p1_rad = { base_circle.center.x + base_circle.radius() * u1_norm.x, 
-				// 	base_circle.center.y + base_circle.radius() * u1_norm.y };
-				// Vec2 is_p2_rad = { base_circle.center.x + base_circle.radius() * u2_norm.x, 
-				// 	base_circle.center.y + base_circle.radius() * u2_norm.y };
-
-
-				// cout << "is_p1: " << is_p1.x << ", " << is_p1.y << endl;
-			  // cout << "is_p2: " << is_p2.x << ", " << is_p2.y << endl;
 				id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
 				id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
 			}
 		}
 	}
-	// TODO: print
-	// cout << "is points: " << endl;
-	// for (auto &id_point : shapes.intersection_points) {
-	// 	cout << id_point.p.x << ", " << id_point.p.y << " ";
-	// }
-	// cout << endl;
 
+	// append all shape defining points to the IdPoints
 	for (auto &line : shapes.lines) {
 		id_point_maybe_append(shapes.shape_defining_points, line.p1, line.id);
 		id_point_maybe_append(shapes.shape_defining_points, line.p2, line.id);
@@ -680,6 +634,7 @@ void graphics(AppState &app, Shapes &shapes) {
 	}
 
 	// update object status based on mouse status and distance
+	// TODO: Fix selected, highlighted mechanism!
 	for (auto &line : shapes.lines) {
 		// perpendicular vector a
 		Vec2 a = { -(line.p2.y - line.p1.y), (line.p2.x - line.p1.x) };
