@@ -101,8 +101,8 @@ struct AppState {
 	SDL_Renderer *renderer;
 	SDL_Texture *window_texture;
 	double density;
-	uint32_t w_pixels;
-	uint32_t h_pixels;
+	int w_pixels;
+	int h_pixels;
 	bool keep_running;
 	AppMode mode = AppMode::NORMAL;
 
@@ -795,26 +795,43 @@ vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2
 	return angle_relations;
 }
 
+// simple version, TODO: inplement Bresenham for better performance
 void draw_line(AppState &app, const Line2 &line, uint32_t *pixel_buf) {
 	int x1 = SDL_lround(line.p1.x);
 	int y1 = SDL_lround(line.p1.y);
 	int x2 = SDL_lround(line.p2.x);
 	int y2 = SDL_lround(line.p2.y);
-
+	
 	double dx = x2 - x1;
-	double dy = y2 - y1;
-	double y;
-	int x;
-	double m = dy/dx;
-	for (x = x1; x < x2; x++) {
-		y = m * (double)(x - x1) + (double)y1;
-		if (x < app.w_pixels-1 && y < app.h_pixels-1) {
-			pixel_buf[x + SDL_lround(y) * app.w_pixels]
-				= get_color(line.state);
+	double dy = y2 - y1; // (0|0) is top left, so y increases downwards
+
+	// Distinguish if steep or shallow slope
+	if (SDL_abs(dx) > SDL_abs(dy)) {
+		int x;
+		double y;
+		double m = dy/dx;
+		int step = ((x2 > x1) ? +1 : -1);
+		for (x = x1; x != x2; x += step) {
+			y = m * (double)(x - x1) + (double)y1;
+			if (x >= 0 && x < app.w_pixels && y >= 0 && y < app.h_pixels) {
+				pixel_buf[x + SDL_lround(y) * app.w_pixels] = get_color(line.state);
+			}
+		}
+	} else {
+		double x;
+		int y;
+		double m = dx/dy;
+		int step = ((y2 > y1) ? +1 : -1);
+		for (y = y1; y != y2; y += step) {
+			x = m * (double)(y - y1) + (double)x1;
+			if (x >= 0 && x < app.w_pixels && y >= 0 && y < app.h_pixels) {
+				pixel_buf[SDL_lround(x) + y * app.w_pixels] = get_color(line.state);
+			}
 		}
 	}
 }
 
+// TODO: improve simple version for dy sides, TODO: Implement Bresenham
 void draw_circle(AppState &app, const Circle2 &circle, uint32_t *pixel_buf) {
 	double radius = circle.radius();
 	for (int x = SDL_lround(circle.center.x - radius); 
@@ -823,13 +840,10 @@ void draw_circle(AppState &app, const Circle2 &circle, uint32_t *pixel_buf) {
 		if (val < 0) {
 			val = 0.0;
 		}
-		/* double y = SDL_sqrt(val); */
-		/* printf("%f\n", y); */
 		double y_offset = SDL_sqrt(val);
 		int y_top = circle.center.y - SDL_lround(y_offset);
 		int y_bottom = circle.center.y + SDL_lround(y_offset);
 
-		/* printf("y_top:%d, r:%f, \n", y_top, c[c2d_cnt].radius); */
 		// Draw the top and bottom points of the circle's circumference:
 		if (x >= 0 && x < app.w_pixels) {
 				if (y_top >= 0 && y_top < app.h_pixels)
@@ -837,7 +851,6 @@ void draw_circle(AppState &app, const Circle2 &circle, uint32_t *pixel_buf) {
 				if (y_bottom >= 0 && y_bottom < app.h_pixels)
 						pixel_buf[x + y_bottom * app.w_pixels] = get_color(circle.state);
 		}
-		/* pixs[x + SDL_lround(y_offset) * appstate->w_pixels] = 0x00000000; */
 	}
 }
 
