@@ -15,8 +15,8 @@
 
 using namespace std;
 
-static const int gk_window_width = 1920/4;
-static const int gk_window_height = 1080/4;
+static const int gk_window_width = 1920/2;
+static const int gk_window_height = 1080/2;
 
 // xrgb colors
 static const uint32_t gk_fg_color = 0x00000000; //black
@@ -24,6 +24,7 @@ static const uint32_t gk_bg_color = 0x00FFFFFF; //white
 static const uint32_t gk_hl_color = 0x000000FF; //blue
 static const uint32_t gk_sel_color = 0x00FF0000; //red
 static const uint32_t gk_conceal_color = 0x006c6c6c; //grey
+static const double gk_epsilon = 0.00001;
 
 
 // Basic Shapes
@@ -82,7 +83,7 @@ struct Circle2 {
 	Circle2(Vec2 center) : center {center} {}
 	Circle2(Vec2 center, Vec2 circum_point)
 		: center {center}, circum_point {circum_point} {}
-	int radius() const {
+	double radius() const {
 		return SDL_sqrt(SDL_pow((center.x - circum_point.x), 2.0) +
 														 SDL_pow((center.y - circum_point.y), 2.0));
 	}
@@ -293,7 +294,6 @@ void process_events(AppState &app, Shapes &shapes) {
 		case SDL_EVENT_KEY_UP:
 			switch(event.key.key) {
 				case SDLK_LSHIFT:
-					cout << "unset" << endl;
 					if (!event.key.repeat) {
 						app.shift_set = false;
 					}
@@ -310,7 +310,6 @@ void process_events(AppState &app, Shapes &shapes) {
           break;
 				case SDLK_LSHIFT:
 					if (!event.key.repeat) {
-						cout << "set" << endl;
 						app.shift_set = true;
 					}
 					break;
@@ -326,6 +325,11 @@ void process_events(AppState &app, Shapes &shapes) {
 						shapes.clear_construction();
           }
           break;
+				case SDLK_D:
+					if (!event.key.repeat) {
+						for (IdPoint &id_point : shapes.intersection_points) {
+						}
+					}
 				case SDLK_Y:
 					if (!event.key.repeat) {
 						std::ofstream outf{ "Sample.txt" };
@@ -348,6 +352,8 @@ void process_events(AppState &app, Shapes &shapes) {
 					break;
 				case SDLK_P:
 					if (!event.key.repeat) {
+						cout << "MOUSE: " << endl;
+						cout << app.mouse.x << "," << app.mouse.y << endl;
 						 cout << "circles:" << endl;
 						 for (auto circle : shapes.circles) {
 							 cout << "(" << circle.center.x << ", "
@@ -427,7 +433,6 @@ void Shapes::construct(AppState &app, Vec2 &point) {
         circle_in_construction = true;
 			} else {
 				if (app.shift_set) {
-					cout << "set" << endl;
 					double last_radius {};
 					for (auto &circle : circles) {
 						if (circle.state == ShapeState::SELECTED) {
@@ -436,7 +441,6 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 					}
 					temp_circle.circum_point = get_point_from_last_radius(point, last_radius, temp_circle);
 				} else {
-					cout << "not set" << endl;
 					temp_circle.circum_point = point;
 				}
 
@@ -448,7 +452,6 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 			// if i wanna have this to work for last selected shape
 			// i probably have to put selected shapes into a vector instead of status
 			if (app.shift_set) {
-				cout << "set" << endl;
 				double last_radius {};
 				for (auto &circle : circles) {
 					if (circle.state == ShapeState::SELECTED) {
@@ -457,7 +460,6 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 				}
 				temp_circle.circum_point = get_point_from_last_radius(point, last_radius, temp_circle);
 			} else {
-				cout << "not set" << endl;
 				temp_circle.circum_point = point;
 			}
 		}
@@ -465,26 +467,32 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 	}
 }
 
+bool equal_with_epsilon(double x, double y) {
+	return (x < y + gk_epsilon && x > y - gk_epsilon);
+}
+
 // test if point and its id allready in id_points vector 
-// if not append or add id
+// if intersection allready in id_points, not append or add id
 void id_point_maybe_append(vector<IdPoint> &id_points, Vec2 &point,
                            uint32_t shape_id) {
   bool point_dup = false;
   for (auto &id_point : id_points) {
-    if (id_point.p.x == point.x && id_point.p.y == point.y) {
+		if (equal_with_epsilon(id_point.p.x, point.x) &&
+				equal_with_epsilon(id_point.p.y, point.y)) {
       point_dup = true;
       bool id_dup = false;
       for (auto &id : id_point.ids) {
-        if (shape_id == id) {
+				if (shape_id == id) {
           id_dup = true;
         }
       }
       if (!id_dup) {
         id_point.ids.push_back(shape_id);
+
       }
     }
   }
-  if (!point_dup) {
+	if (!point_dup) {
     id_points.push_back(IdPoint{point, shape_id});
   }
 }
@@ -575,11 +583,17 @@ void graphics(AppState &app, Shapes &shapes) {
 					// cout << "is point" << endl;
 					
 					// TODO: linde problem only on direction
+					// here i test if the point is inside the line??
+
+					id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
+					id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
 					if (is_p1.x >= p1.x && is_p1.x <= p2.x) {
+						cout << "append ?" << endl;
 						id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
 					}
 
 					if (is_p2.x >= p1.x && is_p2.x <= p2.x) {
+						cout << "append ?" << endl;
 						id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
 					}
 				}
@@ -594,6 +608,7 @@ void graphics(AppState &app, Shapes &shapes) {
 			Circle2 &compare_circle = shapes.circles.at(j);
 			double d =
 					get_point_point_distance(base_circle.center, compare_circle.center);
+			// TODO !!!
 			if (d < (base_circle.radius() + compare_circle.radius())) {
 				double base_meet_distance =
 						(SDL_pow(base_circle.radius(), 2.0) -
@@ -615,6 +630,20 @@ void graphics(AppState &app, Shapes &shapes) {
 
 				Vec2 is_p1 = { meet_point.x + h * a_normal.x, meet_point.y + h * a_normal.y };
 				Vec2 is_p2 = { meet_point.x - h * a_normal.x, meet_point.y - h * a_normal.y };
+
+
+				// project is_point back onto circle, doesnt really help
+				// Vec2 u1 = { is_p1.x - base_circle.center.x, is_p1.y - base_circle.center.y };
+				// Vec2 u2 = { is_p2.x - base_circle.center.x, is_p2.y - base_circle.center.y };
+				// Vec2 u1_norm = vec2_normalize(u1);
+				// Vec2 u2_norm = vec2_normalize(u2);
+
+				// Vec2 is_p1_rad = { base_circle.center.x + base_circle.radius() * u1_norm.x, 
+				// 	base_circle.center.y + base_circle.radius() * u1_norm.y };
+				// Vec2 is_p2_rad = { base_circle.center.x + base_circle.radius() * u2_norm.x, 
+				// 	base_circle.center.y + base_circle.radius() * u2_norm.y };
+
+
 				// cout << "is_p1: " << is_p1.x << ", " << is_p1.y << endl;
 			  // cout << "is_p2: " << is_p2.x << ", " << is_p2.y << endl;
 				id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
@@ -707,19 +736,21 @@ vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2
 	vector<Vec2> angle_points{};
 	vector<double> angle_relations{};
 
+	cout << "ID POINTS:" << endl;
 	// get all is_points on the circle
 	for (auto &id_point : shapes.intersection_points) {
 		bool id_found = false;
 		for (auto &id : id_point.ids) {
 			if (id == circle.id) {
 				id_found = true;
-				cout << "id found" << endl;
 			}
 		}
 		if (id_found) {
 			points.push_back(id_point.p);
+			cout << fixed << setprecision(9) << id_point.p.x << "," << id_point.p.y << " ";
 		}
 	}
+	cout << endl;
 
 	// fill vectors for upper and lower part of the circle
 	for (auto &point : points) {
@@ -736,25 +767,27 @@ vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2
 	std::sort(neg_y.begin(), neg_y.end(), [](Vec2 &p1, Vec2 &p2){
 			return p1.x < p2.x;});
 
-	for (auto &point : pos_y) {
-		cout << point.x << "," << point.y << " ";
-	}
-	cout << endl;
-	for (auto &point : neg_y) {
-		cout << point.x << "," << point.y << " ";
-	}
-	cout << endl;
-
 	angle_points.insert(angle_points.end(), pos_y.begin(), pos_y.end());
 	angle_points.insert(angle_points.end(), neg_y.begin(), neg_y.end());
 	angle_points.push_back(angle_points.front());
+
+	for (auto & angle_point : angle_points) {
+		for (auto & angle_point2 : angle_points) {
+			if (SDL_fabs(angle_point.x - angle_point2.x) < 2.0 && 
+					SDL_fabs(angle_point.x - angle_point2.x) > 0.001) {
+				cout << "LOW DIF: " << SDL_fabs(angle_point.x - angle_point2.x) << endl;
+			}
+			if (SDL_fabs(angle_point.y - angle_point2.y) < 2.0 &&
+					SDL_fabs(angle_point.y - angle_point2.y) > 0.001) {
+				cout << "LOW DIF: " << SDL_fabs(angle_point.y - angle_point2.y) << endl;
+			}
+		}
+	}
 
 	for (int i = 0; i < angle_points.size() - 1; i++) {
 		Vec2 p1 = angle_points.at(i);
 		Vec2 p2 = angle_points.at(i + 1);
 		double d = get_point_point_distance(p1, p2);
-		cout << "distances:" << endl;
-		cout << d << " ";
 		double angle = std::acos((2 * SDL_pow(circle.radius(), 2.0) - SDL_pow(d, 2.0)) /
 														 (2 * SDL_pow(circle.radius(), 2.0)));
 		angle_relations.push_back(angle);
@@ -817,7 +850,7 @@ void draw(AppState &app, Shapes &shapes) {
 		uint32_t *pixels_locked = (uint32_t *)pixels;
 		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, gk_bg_color);
 
-		// draw all finished shapes
+		// [draw all finished shapes]
 		for (const auto &line : shapes.lines) {
 			draw_line(app, line, pixels_locked);
 		}
@@ -826,19 +859,19 @@ void draw(AppState &app, Shapes &shapes) {
 		}
 
 
-		// draw circle around all intersetion points
+		// [draw circle around all intersetion points]
 		for (const auto &is_point : shapes.intersection_points) {
 			Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
 			// draw_circle(app, Circle2 {is_point.p, rad_point}, pixels_locked); 
 		}
-		// draw circle around all shape points 
+		// [draw circle around all shape points]
 		for (const auto &shape_point : shapes.shape_defining_points) {
 			Vec2 rad_point = { shape_point.p.x + 20, shape_point.p.y };
 			// draw_circle(app, Circle2 {shape_point.p, rad_point}, pixels_locked); 
 		}
 
 
-		// draw circle live if close
+		// [draw circle marker if in snap_distance of shapes]
 		shapes.in_snap_distance = false;
 		if (!shapes.in_snap_distance) {
 			for (auto &is_point : shapes.intersection_points) {
@@ -894,7 +927,7 @@ void draw(AppState &app, Shapes &shapes) {
 
 
 
-		// draw the temporary shape from base to cursor live if in construction
+		// [draw the temporary shape from base to cursor live if in construction]
 		if (shapes.line_in_construction) {
 			draw_line(app, shapes.temp_line, pixels_locked);
 		}
