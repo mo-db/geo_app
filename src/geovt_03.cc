@@ -31,9 +31,9 @@ static const double gk_epsilon = 0.00001;
 struct Vec2 {
 	double x {};
 	double y {};
-	Vec2 normalize(Vec2 &v) {
-		return { v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
-			v.y / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)) };
+	Vec2 normalize() {
+		return { x / SDL_sqrt(SDL_pow(x, 2.0) + SDL_pow(y, 2.0)),
+			y / SDL_sqrt(SDL_pow(x, 2.0) + SDL_pow(y, 2.0)) };
 	}
 };
 
@@ -98,6 +98,7 @@ enum struct AppMode {
   NORMAL,
   LINE,
 	CIRCLE,
+	SELECT,
 };
 
 struct AppState {
@@ -143,6 +144,7 @@ string state_to_string(ShapeState &state) {
 struct IdPoint {
 	Vec2 p;
 	vector<uint32_t> ids;
+	ShapeState state = ShapeState::NORMAL;
 	IdPoint() {};
 	IdPoint(Vec2 &point, uint32_t id) {
 		p = point;
@@ -190,13 +192,6 @@ double get_point_point_distance(Vec2 &p1, Vec2 &p2) {
                   SDL_pow(SDL_fabs(p2.y - p1.y), 2.0));
 }
 
-Vec2 vec2_normalize(Vec2 &v) {
-	Vec2 v_normal = { v.x / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)),
-			v.y / SDL_sqrt(SDL_pow(v.x, 2.0) + SDL_pow(v.y, 2.0)) };
-	return v_normal;
-}
-
-
 int app_init(AppState &app);
 void process_events(AppState &app, Shapes &shapes);
 void reset_states(AppState &, Shapes &);
@@ -208,6 +203,8 @@ void graphics(AppState &app, Shapes &shapes);
 void update(AppState &app, Shapes &shapes);
 void draw(AppState &app, Shapes &shapes);
 vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle);
+vector<double> angles_of_points_on_circle(AppState &app, Shapes &shapes,
+                                          Circle2 &circle, Vec2 &start_point);
 
 auto create_line(Shapes &shapes, Vec2 &p0, Vec2 &&p1)
 {
@@ -329,11 +326,36 @@ void process_events(AppState &app, Shapes &shapes) {
 						shapes.clear_construction();
           }
           break;
-				case SDLK_D:
+				case SDLK_S:
+          if (!event.key.repeat) {
+            app.mode = AppMode::SELECT;
+						shapes.clear_construction();
+          }
+          break;
+				case SDLK_U:
 					if (!event.key.repeat) {
+						Vec2 start_point {};
+						// if (any_of(shapes.intersection_points.begin(), 
+						// 						shapes.intersection_points.end(),
+						// 						[](IdPoint &id_point){ 
+						// 						return id_point.state == ShapeState::SELECTED;})) {
+						// 	start_point = id_point.p;
+						// }
 						for (IdPoint &id_point : shapes.intersection_points) {
+							if (id_point.state == ShapeState::SELECTED) {
+								start_point = id_point.p;
+								break;
+							}
+						}
+
+						vector<double> relations {};
+						for (auto &circle : shapes.circles) {
+							if (circle.state == ShapeState::SELECTED) {
+								angles_of_points_on_circle(app, shapes, circle, start_point);
+							}
 						}
 					}
+					break;
 				case SDLK_Y:
 					if (!event.key.repeat) {
 						std::ofstream outf{ "Sample.txt" };
@@ -404,11 +426,23 @@ void process_events(AppState &app, Shapes &shapes) {
 
 Vec2 get_point_from_last_radius(Vec2 &point, double last_radius, Circle2 &temp_circle) {
 		Vec2 v = { point.x - temp_circle.center.x, point.y - temp_circle.center.y };
-		Vec2 v_normal = vec2_normalize(v);
+		Vec2 v_normal = v.normalize();
 		Vec2 circum_point = { temp_circle.center.x + v_normal.x * last_radius,
 			temp_circle.center.y + v_normal.y * last_radius };
 		return circum_point;
 }
+
+void mode_operations(AppState &app, Vec2 &point) {
+  switch (app.mode) {
+  case AppMode::NORMAL:
+    break;
+	case AppMode::SELECT:
+		if (app.shift_set) {
+		}
+		break;
+	}
+}
+
 
 void Shapes::construct(AppState &app, Vec2 &point) {
   switch (app.mode) {
@@ -517,20 +551,19 @@ void graphics(AppState &app, Shapes &shapes) {
 			Line2 &base_line = shapes.lines.at(i);
 			Vec2 p1 = { base_line.p1.x, base_line.p1.y };
 			Vec2 p2 = { base_line.p2.x, base_line.p2.y };
-			Vec2 a = { -(p2.y - p1.y), (p2.x - p1.x) };
-			for (int j = 0; j < shapes.lines.size(); j++) {
-				if (i == j) { continue; }
+			Vec2 a = base_line.get_a();
+			for (int j = i+1; j < shapes.lines.size(); j++) {
 				Line2 &compare_line = shapes.lines.at(j);
 				Vec2 p3 = { compare_line.p1.x, compare_line.p1.y };
 				Vec2 p4 = { compare_line.p2.x, compare_line.p2.y };
 				Vec2 v = { (p4.x - p3.x), (p4.y - p3.y) };
 				Vec2 is_point {};
 				
-				// calculate the intersection
-				double t = (-(-a.x * p1.x - a.y * p1.y) - a.x * p3.x -a.y * p3.y) /
+				// calculate the intersection TODO: add to notes how this works
+				double k = (-(-a.x * p1.x - a.y * p1.y) - a.x * p3.x -a.y * p3.y) /
 					(a.x * v.x + a.y * v.y);
-				is_point.x = p3.x + t * v.x;
-				is_point.y = p3.y + t * v.y;
+				is_point.x = p3.x + k * v.x;
+				is_point.y = p3.y + k * v.y;
 
 				id_point_maybe_append(shapes.intersection_points, is_point, base_line.id);
 			}
@@ -546,25 +579,18 @@ void graphics(AppState &app, Shapes &shapes) {
 				Line2 &compare_line = shapes.lines.at(j);
 				Vec2 p1 = { compare_line.p1.x, compare_line.p1.y };
 				Vec2 p2 = { compare_line.p2.x, compare_line.p2.y };
-
-				Vec2 a = compare_line.get_a();
+				Vec2 pq = { p2.x - p1.x , p2.y - p1.y };
 
 				double distance = compare_line.get_distance_to_point(base_circle.center);
-
 				if (distance < radius) {
 					Vec2 closest_point = compare_line.get_point_closest_point(base_circle.center);
 					double hight = SDL_sqrt(SDL_fabs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
-
-					// normalize pq
-					Vec2 pq = { p2.x - p1.x , p2.y - p1.y };
-					Vec2 pq_normal = { pq.x / SDL_sqrt(SDL_pow(pq.x, 2.0) + SDL_pow(pq.y, 2.0)),
-						pq.y / SDL_sqrt(SDL_pow(pq.x, 2.0) + SDL_pow(pq.y, 2.0)) };
+					Vec2 pq_normal = pq.normalize();
 
 					Vec2 is_p1 { closest_point.x + hight * pq_normal.x, 
 						closest_point.y + hight * pq_normal.y};
 					Vec2 is_p2 { closest_point.x - hight * pq_normal.x, 
 						closest_point.y - hight * pq_normal.y};
-
 
 					id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
 					id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
@@ -579,24 +605,23 @@ void graphics(AppState &app, Shapes &shapes) {
 	for (int i = 0; i < shapes.circles.size(); i++) {
 		Circle2 &base_circle = shapes.circles.at(i);
 		for (int j = i+1; j < shapes.circles.size(); j++) {
-			// if (i == j) { continue; }
 			Circle2 &compare_circle = shapes.circles.at(j);
-			double d =
+			double center_distance =
 					get_point_point_distance(base_circle.center, compare_circle.center);
 			// TODO !!!
-			if (d < (base_circle.radius() + compare_circle.radius())) {
+			if (center_distance < (base_circle.radius() + compare_circle.radius())) {
 				double base_meet_distance =
 						(SDL_pow(base_circle.radius(), 2.0) -
-						 SDL_pow(compare_circle.radius(), 2.0) + SDL_pow(d, 2.0)) /
-						(2 * d);
+						 SDL_pow(compare_circle.radius(), 2.0) +
+						 SDL_pow(center_distance, 2.0)) /
+						(2 * center_distance);
 				double h = SDL_sqrt(SDL_pow(base_circle.radius(), 2.0) -
 														SDL_pow(base_meet_distance, 2.0));
 
 				// TODO: all this need to be functions 
 				Vec2 v = { (compare_circle.center.x - base_circle.center.x), 
 										(compare_circle.center.y - base_circle.center.y) };
-				Vec2 v_normal = v.normalize(v);
-
+				Vec2 v_normal = v.normalize();
 				Vec2 a_normal = { v_normal.y, -v_normal.x };
 
 				Vec2 meet_point = { base_circle.center.x + v_normal.x * base_meet_distance,
@@ -620,48 +645,54 @@ void graphics(AppState &app, Shapes &shapes) {
 		id_point_maybe_append(shapes.shape_defining_points, circle.center, circle.id);
 	}
 	
-	for (auto &circle : shapes.circles) {
-		double d = get_point_point_distance(app.mouse, circle.center);
-		if (d < circle.radius() + 20.0 && d > circle.radius() - 20.0) {
-			if(app.mode == AppMode::NORMAL && app.mouse_click) {
-				if (circle.state == ShapeState::SELECTED) {
-					circle.state = ShapeState::NORMAL;
-				} else {
-					circle.state = ShapeState::SELECTED;
+	// [selection processing]
+	if (app.mode == AppMode::SELECT && !app.shift_set) {
+		// maybe select lines
+		for (auto &line : shapes.lines) {
+			Vec2 a = line.get_a();
+			double distance = SDL_fabs((a.x * app.mouse.x + a.y * app.mouse.y +
+						(-a.x * line.p1.x - a.y * line.p1.y)) /
+					SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
+			SDL_assert(distance <= SDL_max(app.w_pixels, app.h_pixels));
+
+			if (distance < 20.0 && app.mouse.x >= line.p1.x &&
+					app.mouse.x <= line.p2.x) {
+				if(app.mouse_click) {
+					if (line.state == ShapeState::SELECTED) {
+						line.state = ShapeState::NORMAL;
+					} else {
+						line.state = ShapeState::SELECTED;
+					}
 				}
 			}
 		}
-	}
 
-	// update object status based on mouse status and distance
-	// TODO: Fix selected, highlighted mechanism!
-	for (auto &line : shapes.lines) {
-		// perpendicular vector a
-		Vec2 a = { -(line.p2.y - line.p1.y), (line.p2.x - line.p1.x) };
-		double distance = SDL_fabs((a.x * app.mouse.x + a.y * app.mouse.y +
-					(-a.x * line.p1.x - a.y * line.p1.y)) /
-				SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
-		SDL_assert(distance <= SDL_max(app.w_pixels, app.h_pixels));
-		// mouse in line area
-		if (distance < 20.0 && app.mouse.x >= line.p1.x &&
-				app.mouse.x <= line.p2.x) {
-			// line.state = ShapeState::HIGHLIGHTED;
-			if (app.mouse_click) {
-				if (line.state == ShapeState::SELECTED) {
-					line.state = ShapeState::HIGHLIGHTED;
-				} else {
-					line.state = ShapeState::SELECTED;
-				}
-			} else {
-				if (!(line.state == ShapeState::SELECTED)) {
-					line.state = ShapeState::HIGHLIGHTED;
+		// maybe select circle
+		for (auto &circle : shapes.circles) {
+			double d = get_point_point_distance(app.mouse, circle.center);
+
+			if (d < circle.radius() + 20.0 && d > circle.radius() - 20.0) {
+				if(app.mouse_click) {
+					if (circle.state == ShapeState::SELECTED) {
+						circle.state = ShapeState::NORMAL;
+					} else {
+						circle.state = ShapeState::SELECTED;
+					}
 				}
 			}
-		// mouse not in line area
-		} else { 
-			// line.state = ShapeState::NORMAL;
-			if (!(line.state == ShapeState::SELECTED)) {
-				line.state = ShapeState::NORMAL;
+		}
+		// this is only implemented for intersection points at the moment
+	} else if (app.mode == AppMode::SELECT && app.shift_set) {
+		for (auto & id_point : shapes.intersection_points) {
+			double distance = get_point_point_distance(app.mouse, id_point.p);
+			if (distance < 20.0) {
+				if(app.mouse_click) {
+					if (id_point.state == ShapeState::SELECTED) {
+						id_point.state = ShapeState::NORMAL;
+					} else {
+						id_point.state = ShapeState::SELECTED;
+					}
+				}
 			}
 		}
 	}
@@ -684,6 +715,22 @@ uint32_t get_color(const ShapeState &state) {
 	}
 }
 
+// TODO: function should take some point on the circle as arg
+vector<double> angles_of_points_on_circle(AppState &app, Shapes &shapes,
+                                          Circle2 &circle, Vec2 &start_point) {
+	vector<Vec2> points {};
+	vector<double> angles {};
+
+	for (auto &id_point : shapes.intersection_points) {
+		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
+										[&](const auto &id) { return id == circle.id; })) {
+			points.push_back(id_point.p);
+		}
+	}
+	// cout << "startpoint: " << start_point.x << "," << start_point.y << endl;
+	return angles;
+}
+
 vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle) {
 	vector<Vec2> points {};
 	vector<Vec2> pos_y {};
@@ -691,18 +738,13 @@ vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2
 	vector<Vec2> angle_points{};
 	vector<double> angle_relations{};
 
-	cout << "ID POINTS:" << endl;
-	// get all is_points on the circle
+	// get all intersection points that lie on the circle
+	cout << "idpoints: " << endl;
 	for (auto &id_point : shapes.intersection_points) {
-		bool id_found = false;
-		for (auto &id : id_point.ids) {
-			if (id == circle.id) {
-				id_found = true;
-			}
-		}
-		if (id_found) {
+		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
+										[&](const auto &id) { return id == circle.id; })) {
 			points.push_back(id_point.p);
-			cout << fixed << setprecision(9) << id_point.p.x << "," << id_point.p.y << " ";
+			cout << id_point.p.x << "," << id_point.p.y << " ";
 		}
 	}
 	cout << endl;
@@ -743,6 +785,8 @@ vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2
 		Vec2 p1 = angle_points.at(i);
 		Vec2 p2 = angle_points.at(i + 1);
 		double d = get_point_point_distance(p1, p2);
+
+		// kosinussatz
 		double angle = std::acos((2 * SDL_pow(circle.radius(), 2.0) - SDL_pow(d, 2.0)) /
 														 (2 * SDL_pow(circle.radius(), 2.0)));
 		angle_relations.push_back(angle);
@@ -787,7 +831,7 @@ void draw_line(AppState &app, const Line2 &line, uint32_t *pixel_buf) {
 }
 
 // TODO: improve simple version for dy sides, TODO: Implement Bresenham
-void draw_circle(AppState &app, const Circle2 &circle, uint32_t *pixel_buf) {
+void draw_circle(AppState &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t color) {
 	double radius = circle.radius();
 	for (int x = SDL_lround(circle.center.x - radius); 
 			 x < SDL_lround(circle.center.x + radius); x++) {
@@ -802,9 +846,9 @@ void draw_circle(AppState &app, const Circle2 &circle, uint32_t *pixel_buf) {
 		// Draw the top and bottom points of the circle's circumference:
 		if (x >= 0 && x < app.w_pixels) {
 				if (y_top >= 0 && y_top < app.h_pixels)
-						pixel_buf[x + y_top * app.w_pixels] = get_color(circle.state);
+						pixel_buf[x + y_top * app.w_pixels] = color;
 				if (y_bottom >= 0 && y_bottom < app.h_pixels)
-						pixel_buf[x + y_bottom * app.w_pixels] = get_color(circle.state);
+						pixel_buf[x + y_bottom * app.w_pixels] = color;
 		}
 	}
 }
@@ -823,14 +867,16 @@ void draw(AppState &app, Shapes &shapes) {
 			draw_line(app, line, pixels_locked);
 		}
 		for (const auto &circle : shapes.circles) {
-			draw_circle(app, circle, pixels_locked);
+			draw_circle(app, pixels_locked, circle, get_color(circle.state));
 		}
 
 
 		// [draw circle around all intersetion points]
 		for (const auto &is_point : shapes.intersection_points) {
-			Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
-			// draw_circle(app, Circle2 {is_point.p, rad_point}, pixels_locked); 
+			if (is_point.state == ShapeState::SELECTED) {
+				Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
+				draw_circle(app, pixels_locked, Circle2 {is_point.p, rad_point}, get_color(is_point.state));
+			}
 		}
 		// [draw circle around all shape points]
 		for (const auto &shape_point : shapes.shape_defining_points) {
@@ -891,7 +937,7 @@ void draw(AppState &app, Shapes &shapes) {
 
 		// draw snap circle
 		Vec2 rad_point = { shapes.snap_point.x + 20, shapes.snap_point.y };
-		draw_circle(app, Circle2 {shapes.snap_point, rad_point}, pixels_locked); 
+		draw_circle(app, pixels_locked, Circle2 {shapes.snap_point, rad_point}, gk_fg_color); 
 
 
 
@@ -900,7 +946,7 @@ void draw(AppState &app, Shapes &shapes) {
 			draw_line(app, shapes.temp_line, pixels_locked);
 		}
 		if (shapes.circle_in_construction) {
-			draw_circle(app, shapes.temp_circle, pixels_locked);
+			draw_circle(app, pixels_locked, shapes.temp_circle, get_color(shapes.temp_circle.state));
 		}
 
 		SDL_UnlockTexture(app.window_texture);

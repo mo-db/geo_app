@@ -31,13 +31,13 @@ BASE_FLAGS := -std=c++23 -I$(SRC_DIR)
 
 # Warning and Debug flags, debug flags need to be included when linking
 MODE ?= debug
-ifeq ($(M), debug)
+ifeq ($(MODE), debug)
 	DEBUG_FLAGS := -g -fsanitize=address,undefined
 	WARNING_FLAGS := -Wall -Wextra -pedantic
-else ifeq ($(M), thread)
+else ifeq ($(MODE), thread)
 	DEBUG_FLAGS := -g -fsanitize=thread
 	WARNING_FLAGS := -Wall -Wextra -pedantic
-else ifeq ($(M), simple)
+else ifeq ($(MODE), simple)
 	DEBUG_FLAGS :=
 	WARNING_FLAGS := -Wall
 endif
