@@ -1,4 +1,5 @@
 #include <cstdint>
+#include <numbers>
 #include <vector>
 #include <iostream>
 #include <chrono>
@@ -204,7 +205,7 @@ void update(AppState &app, Shapes &shapes);
 void draw(AppState &app, Shapes &shapes);
 vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle);
 vector<double> angles_of_points_on_circle(AppState &app, Shapes &shapes,
-                                          Circle2 &circle, Vec2 &start_point);
+                                          Circle2 &circle);
 
 auto create_line(Shapes &shapes, Vec2 &p0, Vec2 &&p1)
 {
@@ -332,37 +333,14 @@ void process_events(AppState &app, Shapes &shapes) {
 						shapes.clear_construction();
           }
           break;
-				case SDLK_U:
-					if (!event.key.repeat) {
-						Vec2 start_point {};
-						// if (any_of(shapes.intersection_points.begin(), 
-						// 						shapes.intersection_points.end(),
-						// 						[](IdPoint &id_point){ 
-						// 						return id_point.state == ShapeState::SELECTED;})) {
-						// 	start_point = id_point.p;
-						// }
-						for (IdPoint &id_point : shapes.intersection_points) {
-							if (id_point.state == ShapeState::SELECTED) {
-								start_point = id_point.p;
-								break;
-							}
-						}
-
-						vector<double> relations {};
-						for (auto &circle : shapes.circles) {
-							if (circle.state == ShapeState::SELECTED) {
-								angles_of_points_on_circle(app, shapes, circle, start_point);
-							}
-						}
-					}
-					break;
 				case SDLK_Y:
 					if (!event.key.repeat) {
 						std::ofstream outf{ "Sample.txt" };
 						vector<double> relations {};
 						for (auto &circle : shapes.circles) {
 							if (circle.state == ShapeState::SELECTED) {
-								relations = get_circle_angle_relations(app, shapes, circle);
+								relations = angles_of_points_on_circle(app, shapes, circle);
+								// relations = get_circle_angle_relations(app, shapes, circle);
 							}
 						}
 						double addup {};
@@ -715,20 +693,67 @@ uint32_t get_color(const ShapeState &state) {
 	}
 }
 
+// TODO: maybe create custom datatype?, returns 1,2,3 or 4
+int get_quad_of_point_on_circle(Vec2 &center, Vec2 &point) {
+	if (point.x >= center.x && point.y <= center.y) {
+		return 0;
+	} else if (point.x < center.x && point.y <= center.y) {
+		return 1;
+	} else if (point.x <= center.x && point.y > center.y) {
+		return 2;
+	} else if (point.x > center.x && point.y > center.y) {
+		return 3;
+	}
+}
+
 // TODO: function should take some point on the circle as arg
 vector<double> angles_of_points_on_circle(AppState &app, Shapes &shapes,
-                                          Circle2 &circle, Vec2 &start_point) {
-	vector<Vec2> points {};
+                                          Circle2 &circle) {
+	Vec2 base_point { circle.center.x + circle.radius(), circle.center.y };
+	vector<Vec2> points;
 	vector<double> angles {};
+	vector<double> angle_relations {};
 
+	// fill all points into vector, if a point is selected put in front
 	for (auto &id_point : shapes.intersection_points) {
 		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
 										[&](const auto &id) { return id == circle.id; })) {
 			points.push_back(id_point.p);
 		}
 	}
-	// cout << "startpoint: " << start_point.x << "," << start_point.y << endl;
-	return angles;
+
+
+	for (auto &point : points) {
+		
+		double distance = get_point_point_distance(base_point, point);
+
+		// kosinussatz
+		double angle =
+    std::acos((2 * SDL_pow(circle.radius(), 2.0) - SDL_pow(distance, 2.0)) /
+              (2 * SDL_pow(circle.radius(), 2.0)));
+		
+		if (point.y > circle.center.y) {
+			angles.push_back(2 * numbers::pi - angle);
+		} else if (point.y < circle.center.y) {
+			angles.push_back(angle);
+		} else if (point.y == circle.center.y) {
+			if (point.x > circle.center.x) {
+				angles.push_back(0.0);
+			} else if (point.x < circle.center.x) {
+				angles.push_back(180.0);
+			}
+		}
+	}
+
+	sort(angles.begin(), angles.end(),
+		[](double a1, double a2) { return a1 < a2; });
+
+	for (int i = 0; i < angles.size() - 1; i++) {
+		angle_relations.push_back(angles.at(i + 1) - angles.at(i));
+	}
+	angle_relations.push_back(angles.front() + 2 * numbers::pi - angles.back());
+
+	return angle_relations;
 }
 
 vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle) {
