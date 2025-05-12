@@ -27,6 +27,7 @@ static const uint32_t gk_hl_color = 0x000000FF; //blue
 static const uint32_t gk_sel_color = 0x00FF0000; //red
 static const uint32_t gk_conceal_color = 0x006c6c6c; //grey
 static const uint32_t gk_gen_color = 0x000000FF; //blue
+static const uint32_t gk_edit_color = 0x0000FF00; //green
 static const double gk_epsilon = 0.00001;
 
 
@@ -39,6 +40,8 @@ struct Vec2 {
 			y / SDL_sqrt(SDL_pow(x, 2.0) + SDL_pow(y, 2.0)) };
 	}
 };
+
+double get_point_point_distance(Vec2 &p1, Vec2 &p2);
 
 enum struct ShapeState {
 	NORMAL,
@@ -62,6 +65,7 @@ struct Line2 {
 	Vec2 get_a() const { return Vec2 {p2.y - p1.y, -(p2.x - p1.x)}; }
 
 	// returns the closest point on the line to some point in the plane
+	// this handles line like a ray
 	Vec2 get_point_closest_point(const Vec2 &plane_point) const {
 		Vec2 a = get_a();
 		Vec2 line_point {};
@@ -73,12 +77,41 @@ struct Line2 {
 		return line_point;
 	}
 
+	Vec2 project_point_onto_ray(const Vec2 &plane_point) const {
+		Vec2 a = get_a();
+		Vec2 line_point {};
+		double k = ((p1.x * a.x + p1.y * a.y) -
+								(plane_point.x * a.x + plane_point.y * a.y)) /
+							 (a.x * a.x + a.y * a.y);
+		line_point.x = k * a.x + plane_point.x;
+		line_point.y = k * a.y + plane_point.y;
+		return line_point;
+	}
+
+	bool point_inside_clipping_rectangle(Vec2 &point) {
+		return (point.x >= min(p1.x, p2.x) && point.x <= max(p1.x, p2.x) &&
+						point.y >= min(p1.y, p2.y) && point.y <= max(p1.y, p2.y));
+	}
+
 	// Calculate the distance of a point to the line
 	double get_distance_to_point(Vec2 &plane_point) {
 		Vec2 a = get_a();
 		return SDL_fabs((a.x * plane_point.x + a.y * plane_point.y +
 										(-a.x * p1.x - a.y * p1.y)) /
 									 SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
+	}
+
+	double get_distance_to_point_seg(Vec2 &plane_point) {
+		Vec2 projected_point = get_point_closest_point(plane_point);
+		if (point_inside_clipping_rectangle(projected_point)) {
+			Vec2 a = get_a();
+			return SDL_fabs((a.x * plane_point.x + a.y * plane_point.y +
+											(-a.x * p1.x - a.y * p1.y)) /
+											SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
+		} else {
+			return min(get_point_point_distance(plane_point, p1),
+								 get_point_point_distance(plane_point, p2));
+		}
 	}
 };
 
@@ -104,6 +137,7 @@ enum struct AppMode {
 	CIRCLE,
 	SELECT,
 	GENSELECT,
+	EDIT,
 };
 
 struct AppState {
@@ -169,6 +203,8 @@ enum struct GenDirection {
 struct Shapes {
 	vector<Line2> lines;
 	Line2 temp_line {};
+	Line2 edit_line {};
+	int edit_line_point {};
 	vector<Circle2> circles;
 	Circle2 temp_circle {};
 	uint32_t id_counter {};
@@ -188,6 +224,7 @@ struct Shapes {
 	map<int, Vec2> gen_map {};
 
 	bool line_in_construction;
+	bool line_in_edit = false;
 	bool circle_in_construction;
 	void construct(AppState &, Vec2 &point); // dependent on app mode, id++
 	void clear_construction() {
@@ -354,6 +391,12 @@ void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 		gen_shapes.circles.clear();
 		gen_shapes.lines.clear();
 	}
+
+	if (app.mode == AppMode::EDIT) {
+		shapes.lines.push_back(shapes.edit_line);
+		shapes.line_in_edit = false;
+		shapes.edit_line_point = 0;
+	}
 }
 
 void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
@@ -402,10 +445,28 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 						mode_change_cleanup(app, shapes, gen_shapes);
             app.mode = AppMode::SELECT;
           }
+					break;
 				case SDLK_G:
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
             app.mode = AppMode::GENSELECT;
+          }
+          break;
+				case SDLK_E:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.mode = AppMode::EDIT;
+          }
+          break;
+				case SDLK_BACKSPACE:
+          if (!event.key.repeat) {
+						if (app.mode == AppMode::NORMAL) {
+							shapes.lines.erase(remove_if(shapes.lines.begin(), shapes.lines.end(),
+									[](const Line2 &line){ return line.state == ShapeState::SELECTED; }), shapes.lines.end());
+							shapes.circles.erase(remove_if(shapes.circles.begin(), shapes.circles.end(),
+									[](const Circle2 &circle){ return circle.state == ShapeState::SELECTED; }), shapes.circles.end());
+							shapes.quantity_change = true;
+						}
           }
           break;
 				case SDLK_Y:
@@ -506,6 +567,7 @@ bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
 		}
 	}
 
+	// TODO: fix after endpoints
 	for (auto &line : shapes.lines) {
 		if (line.get_distance_to_point(app.mouse) < shapes.snap_distance) {
 			shapes.snap_point = line.get_point_closest_point(app.mouse);
@@ -596,6 +658,7 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 
 				temp_circle.id = id_counter++;
         circles.push_back(temp_circle);
+				quantity_change = true;
         circle_in_construction = false;
 			}
 		} else if (circle_in_construction) {
@@ -623,27 +686,28 @@ bool equal_with_epsilon(double x, double y) {
 
 // test if point and its id allready in id_points vector 
 // if intersection allready in id_points, not append or add id
-void id_point_maybe_append(vector<IdPoint> &id_points, Vec2 &point,
+void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &point,
                            uint32_t shape_id) {
   bool point_dup = false;
   for (auto &id_point : id_points) {
 		if (equal_with_epsilon(id_point.p.x, point.x) &&
 				equal_with_epsilon(id_point.p.y, point.y)) {
       point_dup = true;
-      bool id_dup = false;
       for (auto &id : id_point.ids) {
 				if (shape_id == id) {
-          id_dup = true;
+					return;
         }
       }
-      if (!id_dup) {
-        id_point.ids.push_back(shape_id);
-
-      }
+      id_point.ids.push_back(shape_id);
+			return;
     }
   }
 	if (!point_dup) {
-    id_points.push_back(IdPoint{point, shape_id});
+		// TODO: i should drop error if outside screen
+		if (point.x < app.w_pixels && point.y < app.h_pixels) {
+			id_points.push_back(IdPoint{point, shape_id});
+			cout << "ID POINT APPENDED: " << point.x << "," << point.y << endl;
+		}
   }
 }
 
@@ -677,7 +741,11 @@ void graphics(AppState &app, Shapes &shapes) {
 				is_point.x = p3.x + k * v.x;
 				is_point.y = p3.y + k * v.y;
 
-				id_point_maybe_append(shapes.intersection_points, is_point, base_line.id);
+				if (base_line.point_inside_clipping_rectangle(is_point) &&
+						compare_line.point_inside_clipping_rectangle(is_point)) {
+					id_point_maybe_append(app, shapes.intersection_points, is_point, base_line.id);
+					id_point_maybe_append(app, shapes.intersection_points, is_point, compare_line.id);
+				}
 			}
 		}
 
@@ -704,8 +772,14 @@ void graphics(AppState &app, Shapes &shapes) {
 					Vec2 is_p2 { closest_point.x - hight * pq_normal.x, 
 						closest_point.y - hight * pq_normal.y};
 
-					id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
-					id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
+					if (compare_line.point_inside_clipping_rectangle(is_p1)) {
+						id_point_maybe_append(app, shapes.intersection_points, is_p1, compare_line.id);
+						id_point_maybe_append(app, shapes.intersection_points, is_p1, base_circle.id);
+					}
+					if (compare_line.point_inside_clipping_rectangle(is_p2)) {
+						id_point_maybe_append(app, shapes.intersection_points, is_p2, compare_line.id);
+						id_point_maybe_append(app, shapes.intersection_points, is_p2, base_circle.id);
+					}
 				}
 			}
 		}
@@ -742,21 +816,58 @@ void graphics(AppState &app, Shapes &shapes) {
 				Vec2 is_p1 = { meet_point.x + h * a_normal.x, meet_point.y + h * a_normal.y };
 				Vec2 is_p2 = { meet_point.x - h * a_normal.x, meet_point.y - h * a_normal.y };
 
-				id_point_maybe_append(shapes.intersection_points, is_p1, base_circle.id);
-				id_point_maybe_append(shapes.intersection_points, is_p2, base_circle.id);
+				id_point_maybe_append(app, shapes.intersection_points, is_p1, base_circle.id);
+				id_point_maybe_append(app, shapes.intersection_points, is_p2, base_circle.id);
 			}
 		}
 	}
 
 	// append all shape defining points to the IdPoints
 	for (auto &line : shapes.lines) {
-		id_point_maybe_append(shapes.shape_defining_points, line.p1, line.id);
-		id_point_maybe_append(shapes.shape_defining_points, line.p2, line.id);
+		id_point_maybe_append(app, shapes.shape_defining_points, line.p1, line.id);
+		id_point_maybe_append(app, shapes.shape_defining_points, line.p2, line.id);
 	}
 	for (auto &circle : shapes.circles) {
-		id_point_maybe_append(shapes.shape_defining_points, circle.center, circle.id);
+		id_point_maybe_append(app, shapes.shape_defining_points, circle.center, circle.id);
 	}
-	
+
+
+	// line edit feature
+
+	if (app.mode == AppMode::EDIT && !shapes.line_in_edit) {
+		// need extra edit mode and select only one line at a time here
+		for (int i = 0; i < shapes.lines.size(); i++) {
+			if (shapes.lines.at(i).get_distance_to_point(app.mouse) <= 20.0 && app.mouse_click) {
+				shapes.edit_line = shapes.lines.at(i);
+				shapes.line_in_edit = true;
+				shapes.lines.erase(shapes.lines.begin() + i);
+				cout << "erased" << endl;
+			}
+		}
+	} else if (app.mode == AppMode::EDIT && shapes.line_in_edit) {
+		Vec2 new_p {};
+		if (shapes.in_snap_distance) {
+			new_p = shapes.edit_line.get_point_closest_point(shapes.snap_point);
+		} else {
+			new_p = shapes.edit_line.get_point_closest_point(app.mouse);
+		}
+
+		if (get_point_point_distance(shapes.edit_line.p1, app.mouse) <
+				get_point_point_distance(shapes.edit_line.p2, app.mouse)) {
+			shapes.edit_line.p1 = new_p; //{new_p.x, new_p.y};
+		} else {
+			shapes.edit_line.p2 = new_p; //{new_p.x, new_p.y};
+		}
+
+		if (app.mouse_click) {
+			shapes.lines.push_back(shapes.edit_line);
+			shapes.line_in_edit = false;
+			shapes.edit_line_point = 0;
+		}
+	}
+
+
+
 	// [selection processing]
 	if (app.mode == AppMode::SELECT && !app.shift_set) {
 		// maybe select lines
@@ -767,8 +878,9 @@ void graphics(AppState &app, Shapes &shapes) {
 					SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
 			SDL_assert(distance <= SDL_max(app.w_pixels, app.h_pixels));
 
-			if (distance < 20.0 && app.mouse.x >= line.p1.x &&
-					app.mouse.x <= line.p2.x) {
+			if ((distance < 20.0 && app.mouse.x >= min(line.p1.x, line.p2.x) &&
+					app.mouse.x <= max(line.p1.x, line.p2.x))) {
+
 				if(app.mouse_click) {
 					if (line.state == ShapeState::SELECTED) {
 						line.state = ShapeState::NORMAL;
@@ -808,9 +920,6 @@ void graphics(AppState &app, Shapes &shapes) {
 			}
 		}
 	}
-
-
-	// GenSelect
 }
 
 void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
@@ -823,6 +932,7 @@ void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
       gen_shapes.start_set = false;
 			cout << "id point unset" << endl;
     }
+		//TODO: check that i stay in the same shape id
   } else if (!shapes.snap_is_id_point && gen_shapes.start_set) {
     for (auto iter = shapes.lines.begin(); iter != shapes.lines.end(); iter++) {
       if (iter->id == shapes.snap_id) {
@@ -870,41 +980,38 @@ int get_quad_of_point_on_circle(Vec2 &center, Vec2 &point) {
 		return 2;
 	} else if (point.x > center.x && point.y > center.y) {
 		return 3;
+	} else {
+		exit(EXIT_FAILURE);
 	}
 }
 vector<double> gen_line_relations(AppState &app, Shapes &shapes,
                                           GenLine &line) {
-	vector<Vec2> points;
 	vector<double> distances {};
 	vector<double> distance_relations {};
+
+	Vec2 A = line.start_point;
+	Vec2 B = (A.x == line.line.p1.x && A.y == line.line.p1.y)
+		? B = line.line.p2
+		: B = line.line.p1;
+
+	double max_distance = (get_point_point_distance(A, B));
+	distances.push_back(0.0);
+	distances.push_back(max_distance);
 
 	for (auto &id_point : shapes.intersection_points) {
 		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
 										[&](const auto &id) { return id == line.line.id; })) {
-			points.push_back(id_point.p);
+			distances.push_back(get_point_point_distance(A, id_point.p));
 		}
 	}
 
-	double max_distance {};
-	distances.push_back(0.0);
-	for (auto &point : points) {
-		distances.push_back(get_point_point_distance(line.start_point, point));
-	}
-	// determine which endpoint is the starting point
-	// TODO: need function for this comparing of 2 points
-	if (line.start_point.x == line.line.p1.x &&
-			line.start_point.y == line.line.p1.y) {
-		distances.push_back(get_point_point_distance(line.start_point, line.line.p2));
-		max_distance = get_point_point_distance(line.start_point, line.line.p2);
-	} else if (line.start_point.x == line.line.p2.x &&
-						line.start_point.y == line.line.p2.y) {
-		distances.push_back(get_point_point_distance(line.start_point, line.line.p1));
-		max_distance = get_point_point_distance(line.start_point, line.line.p1);
-	} else {
-		exit(EXIT_FAILURE);
-	}
-
 	sort(distances.begin(), distances.end(), [](double v1, double v2){ return v1 < v2; });
+
+	cout << "distances: " << endl;
+	for (auto &distance : distances) {
+		cout << distance << ", ";
+	}
+	cout << endl;
 
 	for (int i = 0; i < distances.size() - 1; i++) {
 		distance_relations.push_back((distances.at(i+1) - distances.at(i)) / max_distance);
@@ -935,6 +1042,7 @@ double get_angle_circum_point(Circle2 &circle, Vec2 &point) {
 // TODO: function should take some point on the circle as arg
 vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
                                           GenCircle &circle) {
+	bool direction_clockwise = false;
 	vector<Vec2> points;
 	vector<double> angles {};
 	vector<double> angle_relations {};
@@ -963,24 +1071,28 @@ vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
 	double dir_angle = get_angle_circum_point(circle.circle, circle.dir_point);
 	double start_angle_opposite {};
 	if (start_angle > numbers::pi) {
-		start_angle_opposite = start_angle - 2.0 * numbers::pi;
-		if (dir_angle > start_angle || dir_angle < start_angle_opposite) {
+		start_angle_opposite = start_angle - numbers::pi;
+		if (dir_angle >= start_angle || dir_angle < start_angle_opposite) {
 			// counter clockwise
+			direction_clockwise = false;
 			sort(angles.begin(), angles.end(),
 				[](double a1, double a2) { return a1 < a2; });
 		} else {
 			// clockwise
+			direction_clockwise = true;
 			sort(angles.begin(), angles.end(),
 				[](double a1, double a2) { return a1 > a2; });
 		}
 	} else {
 		start_angle_opposite = start_angle + numbers::pi;
-		if (dir_angle > start_angle && dir_angle > start_angle_opposite) {
+		if (dir_angle >= start_angle && dir_angle < start_angle_opposite) {
 			// counter clockwise
+			direction_clockwise = false;
 			sort(angles.begin(), angles.end(),
 				[](double a1, double a2) { return a1 < a2; });
 		} else {
 			// clockwise
+			direction_clockwise = true;
 			sort(angles.begin(), angles.end(),
 				[](double a1, double a2) { return a1 > a2; });
 		}
@@ -1003,11 +1115,17 @@ vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
 	// }
 	// std::cout << std::endl;
 
-	for (int i = 0; i < angles.size() - 1; i++) {
-		angle_relations.push_back(angles.at(i + 1) - angles.at(i));
+	if (direction_clockwise) {
+		for (int i = 0; i < angles.size() - 1; i++) {
+			angle_relations.push_back((angles.at(i) - angles.at(i + 1)) / (2 * numbers:: pi));
+		}
+		angle_relations.push_back((angles.back() + 2 * numbers::pi - angles.front()) / (2 * numbers::pi));
+	} else {
+		angle_relations.push_back((angles.front() + 2 * numbers::pi - angles.back()) / (2 * numbers::pi));
+		for (int i = 0; i < angles.size() - 1; i++) {
+			angle_relations.push_back((angles.at(i + 1) - angles.at(i)) / (2 * numbers::pi));
+		}
 	}
-	angle_relations.push_back(angles.front() + 2 * numbers::pi - angles.back());
-
 	return angle_relations;
 }
 
@@ -1185,6 +1303,11 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 		// [draw the temporary shape from base to cursor live if in construction]
 		if (shapes.line_in_construction) {
 			draw_line(app, pixels_locked, shapes.temp_line, get_color(shapes.temp_line.state));
+		}
+
+		// draw edit line
+		if (shapes.line_in_edit) {
+			draw_line(app, pixels_locked, shapes.edit_line, gk_edit_color);
 		}
 		if (shapes.circle_in_construction) {
 			draw_circle(app, pixels_locked, shapes.temp_circle, get_color(shapes.temp_circle.state));
