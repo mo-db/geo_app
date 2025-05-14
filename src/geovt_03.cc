@@ -28,7 +28,7 @@ static const uint32_t gk_sel_color = 0x00FF0000; //red
 static const uint32_t gk_conceal_color = 0x006c6c6c; //grey
 static const uint32_t gk_gen_color = 0x000000FF; //blue
 static const uint32_t gk_edit_color = 0x0000FF00; //green
-static const double gk_epsilon = 0.00001;
+static const double gk_epsilon = 0.5;
 
 
 // Basic Shapes
@@ -209,6 +209,7 @@ struct Shapes {
 	Circle2 temp_circle {};
 	uint32_t id_counter {};
 	bool quantity_change = false;
+	bool recalc = false;
 
 	Vec2 snap_point {};
 	double snap_distance = 20.0;
@@ -230,10 +231,6 @@ struct Shapes {
 	void clear_construction() {
 		line_in_construction = false;
 		circle_in_construction = false;
-	}
-
-	void frame_reset() { 
-		quantity_change = false;
 	}
 
 	void pop_selected(AppState &app);
@@ -281,6 +278,7 @@ uint32_t get_color(const ShapeState &);
 void graphics(AppState &app, Shapes &shapes);
 void update(AppState &app, Shapes &shapes);
 void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
+void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 
 void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 
@@ -309,6 +307,9 @@ auto create_circle(Shapes &shapes, Vec2 &center, Vec2 &circum_point)
 	return shapes.circles.end();
 }
 
+
+void check_for_changes(AppState &app, Shapes &shapes);
+
 int main() {
 	AppState app;
 	Shapes shapes;
@@ -317,7 +318,6 @@ int main() {
 		return 1;
 
 	while(app.keep_running) {
-		shapes.frame_reset();
 		app.frame_reset();
 		process_events(app, shapes, gen_shapes);
 
@@ -334,8 +334,13 @@ int main() {
 			maybe_gen_select(app, shapes, gen_shapes);
 		}
 
+		if(app.mode == AppMode::NORMAL && app.mouse_click) {
+			get_under_cursor_info(app, shapes, gen_shapes);
+		}
+
 		graphics(app, shapes);
 		draw(app, shapes, gen_shapes);
+		check_for_changes(app, shapes);
 		SDL_Delay(10);
 	}
 	return 0;
@@ -396,6 +401,35 @@ void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 		shapes.lines.push_back(shapes.edit_line);
 		shapes.line_in_edit = false;
 		shapes.edit_line_point = 0;
+	}
+}
+
+void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
+	if (shapes.in_snap_distance) {
+		if (shapes.snap_is_id_point) {
+			for (auto &id_point : shapes.intersection_points) {
+				if (id_point.p.x == shapes.snap_point.x &&
+						id_point.p.y == shapes.snap_point.y) {
+					cout << "IS Point: " << id_point.p.x << ", " << id_point.p.y << endl;
+					cout << "ids: " << endl;
+					for (auto &id : id_point.ids) {
+						cout << id << ", ";
+					}
+					cout << endl;
+				}
+			}
+			for (auto &id_point : shapes.shape_defining_points) {
+				if (id_point.p.x == shapes.snap_point.x &&
+						id_point.p.y == shapes.snap_point.y) {
+					cout << "SD Point: " << id_point.p.x << ", " << id_point.p.y << endl;
+					cout << "ids: " << endl;
+					for (auto &id : id_point.ids) {
+						cout << id << ", ";
+					}
+					cout << endl;
+				}
+			}
+		}
 	}
 }
 
@@ -477,15 +511,13 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 
 						for (auto &circle : gen_shapes.circles) {
 							relations = gen_circle_relations(app, shapes, circle);
+							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
 						}
-						relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
-						relations.clear();
 
 						for (auto &line: gen_shapes.lines) {
 							relations = gen_line_relations(app, shapes, line);
+							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
 						}
-						relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
-						relations.clear();
 
 						cout << "Relations: " << endl;
 						double addup {};
@@ -718,7 +750,7 @@ void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &poin
 // only the circle marker vector to hold snap points -> i have two
 // vectors at the moment that hold the same thing
 void graphics(AppState &app, Shapes &shapes) {
-	if (shapes.quantity_change) {
+	if (shapes.recalc) {
 		shapes.intersection_points.clear();
 		shapes.shape_defining_points.clear();
 
@@ -818,6 +850,8 @@ void graphics(AppState &app, Shapes &shapes) {
 
 				id_point_maybe_append(app, shapes.intersection_points, is_p1, base_circle.id);
 				id_point_maybe_append(app, shapes.intersection_points, is_p2, base_circle.id);
+				id_point_maybe_append(app, shapes.intersection_points, is_p1, compare_circle.id);
+				id_point_maybe_append(app, shapes.intersection_points, is_p2, compare_circle.id);
 			}
 		}
 	}
@@ -861,6 +895,7 @@ void graphics(AppState &app, Shapes &shapes) {
 
 		if (app.mouse_click) {
 			shapes.lines.push_back(shapes.edit_line);
+			shapes.quantity_change = true;
 			shapes.line_in_edit = false;
 			shapes.edit_line_point = 0;
 		}
@@ -995,14 +1030,19 @@ vector<double> gen_line_relations(AppState &app, Shapes &shapes,
 		: B = line.line.p1;
 
 	double max_distance = (get_point_point_distance(A, B));
-	distances.push_back(0.0);
-	distances.push_back(max_distance);
 
 	for (auto &id_point : shapes.intersection_points) {
 		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
 										[&](const auto &id) { return id == line.line.id; })) {
 			distances.push_back(get_point_point_distance(A, id_point.p));
 		}
+	}
+
+	if (std::find(distances.begin(), distances.end(), 0.0) == distances.end()) {
+		distances.push_back(0.0);
+	}
+	if (std::find(distances.begin(), distances.end(), max_distance) == distances.end()) {
+		distances.push_back(max_distance);
 	}
 
 	sort(distances.begin(), distances.end(), [](double v1, double v2){ return v1 < v2; });
@@ -1014,7 +1054,7 @@ vector<double> gen_line_relations(AppState &app, Shapes &shapes,
 	cout << endl;
 
 	for (int i = 0; i < distances.size() - 1; i++) {
-		distance_relations.push_back((distances.at(i+1) - distances.at(i)) / max_distance);
+		distance_relations.push_back(1 / ((distances.at(i+1) - distances.at(i)) / max_distance));
 	}
 	return distance_relations;
 }
@@ -1105,27 +1145,54 @@ vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
 	}
 	std::cout << std::endl;
 
-	// auto iter = find(angles.begin(), angles.end(), start_angle);
-	// rotate(angles.begin(), iter, angles.end());
+	auto iter = find(angles.begin(), angles.end(), start_angle);
+	rotate(angles.begin(), iter, angles.end());
 
-	// // Print the rotated vector
-	// std::cout << "Rotated vector: ";
-	// for (int angle : angles) {
-	// 		std::cout << angle << " ";
-	// }
-	// std::cout << std::endl;
+	// Print the rotated vector
+	std::cout << "Rotated vector: ";
+	for (double angle : angles) {
+			std::cout << angle << " ";
+	}
+	std::cout << std::endl;
+
+	double angle {};
+
+	for (int i = 0; i < angles.size() - 1; i++) {
+		double this_angle = angles.at(i);
+		double next_angle = angles.at(i + 1);
+		if (direction_clockwise) {
+			if (this_angle > next_angle) {
+				angle = ((this_angle - next_angle) / (2 * numbers::pi));
+			} else {
+				angle = (((2 * numbers::pi + this_angle) - next_angle) / (2 * numbers::pi));
+			}
+		} else {
+			if (this_angle < next_angle) {
+				angle = ((next_angle - this_angle) / (2 * numbers::pi));
+			} else {
+				angle = (((2 * numbers::pi + next_angle) - this_angle) / (2 * numbers::pi));
+			}
+		}
+		angle_relations.push_back(1/angle);
+	}
+
 
 	if (direction_clockwise) {
-		for (int i = 0; i < angles.size() - 1; i++) {
-			angle_relations.push_back((angles.at(i) - angles.at(i + 1)) / (2 * numbers:: pi));
+		if (angles.front() < angles.back()) {
+			angle = ((angles.back() - angles.front()) / (2 * numbers::pi));
+		} else {
+			angle = ((2 * numbers::pi + angles.back()) - (angles.front()) / (2 * numbers::pi));
 		}
-		angle_relations.push_back((angles.back() + 2 * numbers::pi - angles.front()) / (2 * numbers::pi));
 	} else {
-		angle_relations.push_back((angles.front() + 2 * numbers::pi - angles.back()) / (2 * numbers::pi));
-		for (int i = 0; i < angles.size() - 1; i++) {
-			angle_relations.push_back((angles.at(i + 1) - angles.at(i)) / (2 * numbers::pi));
+		if (angles.front() > angles.back()) {
+			angle = ((angles.front() - angles.back()) / (2 * numbers::pi));
+		} else {
+			angle = (((2 * numbers::pi + angles.front()) - angles.back()) / (2 * numbers::pi));
 		}
 	}
+
+	angle_relations.push_back(1/angle);
+
 	return angle_relations;
 }
 
@@ -1321,4 +1388,13 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 		dt_ms = t2 - t1;
 	// std::cout << "dt_out: " << dt_ms << std::endl;
 	SDL_RenderPresent(app.renderer);
+}
+
+void check_for_changes(AppState &app, Shapes &shapes) {
+	if (shapes.quantity_change) {
+		shapes.recalc = true;
+	} else {
+		shapes.recalc = false;
+	}
+	shapes.quantity_change = false;
 }
