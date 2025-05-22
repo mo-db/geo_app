@@ -1,0 +1,13 @@
+#pragma once
+#include <cstdint>
+#include <map>
+#include <numbers>
+#include <vector>
+#include <iostream>
+#include <chrono>
+#include <cassert>
+#include <cstring>
+#include <cmath>
+#include <algorithm>
+#include <fstream>
+#include <SDL3/SDL.h>

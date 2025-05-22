@@ -1,135 +1,13 @@
-#include <cstdint>
-#include <map>
-#include <numbers>
-#include <vector>
-#include <iostream>
-#include <chrono>
-#include <cassert>
-#include <cstring>
-#include <cmath>
-#include <algorithm>
-#include <fstream>
-#include <SDL3/SDL.h>
-
-// INFO: use default arguments for functions like create_circle(default color)
+#include "include.h"
+#include "graphics.h"
 
 #define DEBUG_MODE
 
 using namespace std;
 
-static const int gk_window_width = 1920/2;
-static const int gk_window_height = 1080/2;
-
-// xrgb colors
-static const uint32_t gk_fg_color = 0x00000000; //black
-static const uint32_t gk_bg_color = 0x00FFFFFF; //white
-static const uint32_t gk_hl_color = 0x000000FF; //blue
-static const uint32_t gk_sel_color = 0x00FF0000; //red
-static const uint32_t gk_conceal_color = 0x006c6c6c; //grey
-static const uint32_t gk_gen_color = 0x000000FF; //blue
-static const uint32_t gk_edit_color = 0x0000FF00; //green
-
-static const double gk_epsilon = 1e-6;
-static const double gk_pixel_epsilon = 0.5;
-
-// Basic Shapes
-struct Vec2 {
-	double x {};
-	double y {};
-	Vec2 normalize() {
-		return { x / SDL_sqrt(SDL_pow(x, 2.0) + SDL_pow(y, 2.0)),
-			y / SDL_sqrt(SDL_pow(x, 2.0) + SDL_pow(y, 2.0)) };
-	}
-};
-
-double get_point_point_distance(Vec2 &p1, Vec2 &p2);
-
-enum struct ShapeState {
-	NORMAL,
-	HIGHLIGHTED,
-	SELECTED,
-	CONCEALED,
-	GENSELECTED,
-};
-
-// How should the destructor look here?, i need to delete is_points if possible
-struct Line2 {
-	Vec2 p1 {};
-	Vec2 p2 {};
-	uint32_t id {};
-	ShapeState state = ShapeState::NORMAL;
-	Line2() {}
-	Line2(Vec2 p1) : p1 {p1} {}
-	Line2(Vec2 p1, Vec2 p2) : p1 {p1}, p2 {p2} {}
-
-	// get the perpendiculair vector a to the line
-	Vec2 get_a() const { return Vec2 {p2.y - p1.y, -(p2.x - p1.x)}; }
-
-	// returns the closest point on the line to some point in the plane
-	// this handles line like a ray
-	Vec2 get_point_closest_point(const Vec2 &plane_point) const {
-		Vec2 a = get_a();
-		Vec2 line_point {};
-		double k = ((p1.x * a.x + p1.y * a.y) -
-								(plane_point.x * a.x + plane_point.y * a.y)) /
-							 (a.x * a.x + a.y * a.y);
-		line_point.x = k * a.x + plane_point.x;
-		line_point.y = k * a.y + plane_point.y;
-		return line_point;
-	}
-
-	Vec2 project_point_onto_ray(const Vec2 &plane_point) const {
-		Vec2 a = get_a();
-		Vec2 line_point {};
-		double k = ((p1.x * a.x + p1.y * a.y) -
-								(plane_point.x * a.x + plane_point.y * a.y)) /
-							 (a.x * a.x + a.y * a.y);
-		line_point.x = k * a.x + plane_point.x;
-		line_point.y = k * a.y + plane_point.y;
-		return line_point;
-	}
-
-	bool point_inside_clipping_rectangle(Vec2 &point) {
-		return (point.x >= min(p1.x, p2.x) && point.x <= max(p1.x, p2.x) &&
-						point.y >= min(p1.y, p2.y) && point.y <= max(p1.y, p2.y));
-	}
-
-	// Calculate the distance of a point to the line
-	double get_distance_to_point(Vec2 &plane_point) {
-		Vec2 a = get_a();
-		return SDL_fabs((a.x * plane_point.x + a.y * plane_point.y +
-										(-a.x * p1.x - a.y * p1.y)) /
-									 SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
-	}
-
-	double get_distance_to_point_seg(Vec2 &plane_point) {
-		Vec2 projected_point = get_point_closest_point(plane_point);
-		if (point_inside_clipping_rectangle(projected_point)) {
-			Vec2 a = get_a();
-			return SDL_fabs((a.x * plane_point.x + a.y * plane_point.y +
-											(-a.x * p1.x - a.y * p1.y)) /
-											SDL_sqrt(SDL_pow(a.x, 2.0) + SDL_pow(a.y, 2.0)));
-		} else {
-			return min(get_point_point_distance(plane_point, p1),
-								 get_point_point_distance(plane_point, p2));
-		}
-	}
-};
-
-struct Circle2 {
- 	Vec2 center {};
-	Vec2 circum_point {};
-	uint32_t id {};
-	ShapeState state = ShapeState::NORMAL;
-	Circle2() {}
-	Circle2(Vec2 center) : center {center} {}
-	Circle2(Vec2 center, Vec2 circum_point)
-		: center {center}, circum_point {circum_point} {}
-	double radius() const {
-		return SDL_sqrt(SDL_pow((center.x - circum_point.x), 2.0) +
-														 SDL_pow((center.y - circum_point.y), 2.0));
-	}
-};
+constexpr const int gk_window_width = 1920/2;
+constexpr int gk_window_height = 1080/2;
+constexpr double gk_epsilon = 1e-6;
 
 // the application
 enum struct AppMode {
@@ -182,17 +60,6 @@ string state_to_string(ShapeState &state) {
 	return s;
 }
 
-struct IdPoint {
-	Vec2 p;
-	vector<uint32_t> ids;
-	ShapeState state = ShapeState::NORMAL;
-	IdPoint() {};
-	IdPoint(Vec2 &point, uint32_t id) {
-		p = point;
-		ids.push_back(id);
-	}
-};
-
 enum struct GenDirection {
 	UP,			// line
 	DOWN,		// line
@@ -225,9 +92,9 @@ struct Shapes {
 	// gen_map holds shape id and direction point 
 	map<int, Vec2> gen_map {};
 
-	bool line_in_construction;
+	bool line_in_construction = false;
 	bool line_in_edit = false;
-	bool circle_in_construction;
+	bool circle_in_construction = false;
 	void construct(AppState &, Vec2 &point); // dependent on app mode, id++
 	void clear_construction() {
 		line_in_construction = false;
@@ -263,12 +130,6 @@ struct GenShapes {
 };
 void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 
-
-double get_point_point_distance(Vec2 &p1, Vec2 &p2) {
-  return SDL_sqrt(SDL_pow(SDL_fabs(p2.x - p1.x), 2.0) +
-                  SDL_pow(SDL_fabs(p2.y - p1.y), 2.0));
-}
-
 int app_init(AppState &app);
 void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 void reset_states(AppState &, Shapes &);
@@ -276,7 +137,7 @@ void reset_states(AppState &, Shapes &);
 void create_shapes(AppState &app, Shapes &shapes);
 uint32_t get_color(const ShapeState &);
 
-void graphics(AppState &app, Shapes &shapes);
+void gfx(AppState &app, Shapes &shapes);
 void update(AppState &app, Shapes &shapes);
 void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
@@ -285,7 +146,6 @@ void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 
 // delete
 vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle);
-
 
 vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
                                           GenCircle &circle);
@@ -339,7 +199,7 @@ int main() {
 			get_under_cursor_info(app, shapes, gen_shapes);
 		}
 
-		graphics(app, shapes);
+		gfx(app, shapes);
 		draw(app, shapes, gen_shapes);
 		check_for_changes(app, shapes);
 		SDL_Delay(10);
@@ -583,7 +443,6 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 // Check for all id_points and shapes if cursor in snap_distance
 // If it is, set as snap point and return ture, return false if reach end
 bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
-
 	for (auto &is_point : shapes.intersection_points) {
 		if (get_point_point_distance(is_point.p, app.mouse) < shapes.snap_distance) {
 			shapes.snap_point = is_point.p;
@@ -600,13 +459,15 @@ bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
 		}
 	}
 
-	// TODO: fix after endpoints
 	for (auto &line : shapes.lines) {
-		if (line.get_distance_to_point(app.mouse) < shapes.snap_distance) {
-			shapes.snap_point = line.get_point_closest_point(app.mouse);
-			shapes.snap_is_id_point = false;
-			shapes.snap_id = line.id;
-			return true;
+		if (line.get_distance_point_to_seg(app.mouse) < shapes.snap_distance) {
+			if (min(get_point_point_distance(app.mouse, line.p1),
+						get_point_point_distance(app.mouse, line.p1)) > shapes.snap_distance) {
+				shapes.snap_point = line.project_point_to_ray(app.mouse);
+				shapes.snap_is_id_point = false;
+				shapes.snap_id = line.id;
+				return true;
+			}
 		}
 	}
 
@@ -713,8 +574,8 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 	}
 }
 
-bool equal_with_epsilon(double x, double y) {
-	return (x < y + gk_pixel_epsilon && x > y - gk_pixel_epsilon);
+bool equal_with_gk_epsilon(double x, double y) {
+	return (x < y + graphics::pixel_epsilon && x > y - graphics::pixel_epsilon);
 }
 
 // test if point and its id allready in id_points vector 
@@ -723,8 +584,8 @@ void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &poin
                            uint32_t shape_id) {
   bool point_dup = false;
   for (auto &id_point : id_points) {
-		if (equal_with_epsilon(id_point.p.x, point.x) &&
-				equal_with_epsilon(id_point.p.y, point.y)) {
+		if (equal_with_gk_epsilon(id_point.p.x, point.x) &&
+				equal_with_gk_epsilon(id_point.p.y, point.y)) {
       point_dup = true;
       for (auto &id : id_point.ids) {
 				if (shape_id == id) {
@@ -750,7 +611,7 @@ void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &poin
 // circle-line, circle-circle
 // only the circle marker vector to hold snap points -> i have two
 // vectors at the moment that hold the same thing
-void graphics(AppState &app, Shapes &shapes) {
+void gfx(AppState &app, Shapes &shapes) {
 	if (shapes.recalc) {
 		shapes.intersection_points.clear();
 		shapes.shape_defining_points.clear();
@@ -774,8 +635,8 @@ void graphics(AppState &app, Shapes &shapes) {
 				is_point.x = p3.x + k * v.x;
 				is_point.y = p3.y + k * v.y;
 
-				if (base_line.point_inside_clipping_rectangle(is_point) &&
-						compare_line.point_inside_clipping_rectangle(is_point)) {
+				if (base_line.check_point_within_seg_bounds(is_point) &&
+						compare_line.check_point_within_seg_bounds(is_point)) {
 					id_point_maybe_append(app, shapes.intersection_points, is_point, base_line.id);
 					id_point_maybe_append(app, shapes.intersection_points, is_point, compare_line.id);
 				}
@@ -794,9 +655,9 @@ void graphics(AppState &app, Shapes &shapes) {
 				Vec2 p2 = { compare_line.p2.x, compare_line.p2.y };
 				Vec2 pq = { p2.x - p1.x , p2.y - p1.y };
 
-				double distance = compare_line.get_distance_to_point(base_circle.center);
+				double distance = compare_line.get_distance_point_to_ray(base_circle.center);
 				if (distance < radius) {
-					Vec2 closest_point = compare_line.get_point_closest_point(base_circle.center);
+					Vec2 closest_point = compare_line.project_point_to_ray(base_circle.center);
 					double hight = SDL_sqrt(SDL_fabs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
 					Vec2 pq_normal = pq.normalize();
 
@@ -805,11 +666,11 @@ void graphics(AppState &app, Shapes &shapes) {
 					Vec2 is_p2 { closest_point.x - hight * pq_normal.x, 
 						closest_point.y - hight * pq_normal.y};
 
-					if (compare_line.point_inside_clipping_rectangle(is_p1)) {
+					if (compare_line.check_point_within_seg_bounds(is_p1)) {
 						id_point_maybe_append(app, shapes.intersection_points, is_p1, compare_line.id);
 						id_point_maybe_append(app, shapes.intersection_points, is_p1, base_circle.id);
 					}
-					if (compare_line.point_inside_clipping_rectangle(is_p2)) {
+					if (compare_line.check_point_within_seg_bounds(is_p2)) {
 						id_point_maybe_append(app, shapes.intersection_points, is_p2, compare_line.id);
 						id_point_maybe_append(app, shapes.intersection_points, is_p2, base_circle.id);
 					}
@@ -872,7 +733,7 @@ void graphics(AppState &app, Shapes &shapes) {
 	if (app.mode == AppMode::EDIT && !shapes.line_in_edit) {
 		// need extra edit mode and select only one line at a time here
 		for (int i = 0; i < shapes.lines.size(); i++) {
-			if (shapes.lines.at(i).get_distance_to_point(app.mouse) <= 20.0 && app.mouse_click) {
+			if (shapes.lines.at(i).get_distance_point_to_ray(app.mouse) <= 20.0 && app.mouse_click) {
 				shapes.edit_line = shapes.lines.at(i);
 				shapes.line_in_edit = true;
 				shapes.lines.erase(shapes.lines.begin() + i);
@@ -882,9 +743,9 @@ void graphics(AppState &app, Shapes &shapes) {
 	} else if (app.mode == AppMode::EDIT && shapes.line_in_edit) {
 		Vec2 new_p {};
 		if (shapes.in_snap_distance) {
-			new_p = shapes.edit_line.get_point_closest_point(shapes.snap_point);
+			new_p = shapes.edit_line.project_point_to_ray(shapes.snap_point);
 		} else {
-			new_p = shapes.edit_line.get_point_closest_point(app.mouse);
+			new_p = shapes.edit_line.project_point_to_ray(app.mouse);
 		}
 
 		if (get_point_point_distance(shapes.edit_line.p1, app.mouse) <
@@ -992,16 +853,16 @@ void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 uint32_t get_color(const ShapeState &state) {
 	switch (state) {
 		case ShapeState::NORMAL:
-			return gk_fg_color;
+			return graphics::fg_color;
 			break;
 		case ShapeState::HIGHLIGHTED:
-			return gk_hl_color;
+			return graphics::hl_color;
 			break;
 		case ShapeState::SELECTED:
-			return gk_sel_color;
+			return graphics::sel_color;
 			break;
 		case ShapeState::CONCEALED:
-			return gk_conceal_color;
+			return graphics::conceal_color;
 			break;
 	}
 }
@@ -1359,7 +1220,7 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	int pitch;
   if (SDL_LockTexture(app.window_texture, NULL, &pixels, &pitch)) {
 		uint32_t *pixels_locked = (uint32_t *)pixels;
-		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, gk_bg_color);
+		std::fill_n((uint32_t*)pixels, app.w_pixels * app.h_pixels, graphics::bg_color);
 
 		// [draw all finished shapes]
 		for (const auto &line : shapes.lines) {
@@ -1385,19 +1246,19 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 		// [draw circle around snap point]
 		if (shapes.in_snap_distance) {
 			Vec2 rad_point = { shapes.snap_point.x + 20, shapes.snap_point.y };
-			draw_circle(app, pixels_locked, Circle2 {shapes.snap_point, rad_point}, gk_fg_color); 
+			draw_circle(app, pixels_locked, Circle2 {shapes.snap_point, rad_point}, graphics::fg_color); 
 		}
 
 		// draw geo_selected shapes and points in specific color
 		for (auto &gen_line : gen_shapes.lines) {
 			Vec2 rad_point = { gen_line.start_point.x + 20, gen_line.start_point.y };
-			draw_circle(app, pixels_locked, Circle2 {gen_line.start_point, rad_point}, gk_gen_color); 
-			draw_line(app, pixels_locked, gen_line.line, gk_gen_color);
+			draw_circle(app, pixels_locked, Circle2 {gen_line.start_point, rad_point}, graphics::gen_color); 
+			draw_line(app, pixels_locked, gen_line.line, graphics::gen_color);
 		}
 		for (auto &gen_circle : gen_shapes.circles) {
 			Vec2 rad_point = { gen_circle.start_point.x + 20, gen_circle.start_point.y };
-			draw_circle(app, pixels_locked, Circle2 {gen_circle.start_point, rad_point}, gk_gen_color); 
-			draw_circle(app, pixels_locked, gen_circle.circle, gk_gen_color); 
+			draw_circle(app, pixels_locked, Circle2 {gen_circle.start_point, rad_point}, graphics::gen_color); 
+			draw_circle(app, pixels_locked, gen_circle.circle, graphics::gen_color); 
 		}
 
 
@@ -1408,7 +1269,7 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 
 		// draw edit line
 		if (shapes.line_in_edit) {
-			draw_line(app, pixels_locked, shapes.edit_line, gk_edit_color);
+			draw_line(app, pixels_locked, shapes.edit_line, graphics::edit_color);
 		}
 		if (shapes.circle_in_construction) {
 			draw_circle(app, pixels_locked, shapes.temp_circle, get_color(shapes.temp_circle.state));

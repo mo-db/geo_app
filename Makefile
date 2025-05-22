@@ -5,8 +5,8 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES := geovt_03
-SRC_DIR := src
+SRC_NAMES := main graphics
+SRC_DIR := new_src
 OBJ_DIR := obj
 BIN_DIR := bin
 
@@ -45,7 +45,7 @@ endif
 ## Debug Flag presets, AF to add flags
 AF ?=
 CXXFLAGS := $(BASE_FLAGS) $(DEBUG_FLAGS) $(WARNING_FLAGS) $(AF)
-LDFLAGS := -lpthread -lm $(DEBUG_FLAGS) 
+LDFLAGS := -lpthread -lm $(DEBUG_FLAGS)
 
 ## External libraries
 EXT_LIBS := sdl3
