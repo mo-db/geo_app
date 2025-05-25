@@ -4,6 +4,11 @@
 #define DEBUG_MODE
 
 using namespace std;
+using graphics::Vec2;
+using graphics::IdPoint;
+using graphics::Line2;
+using graphics::Circle2;
+using graphics::ShapeState;
 
 constexpr const int gk_window_width = 1920/2;
 constexpr int gk_window_height = 1080/2;
@@ -73,6 +78,7 @@ struct Shapes {
 	Line2 temp_line {};
 	Line2 edit_line {};
 	int edit_line_point {};
+
 	vector<Circle2> circles;
 	Circle2 temp_circle {};
 	uint32_t id_counter {};
@@ -492,14 +498,6 @@ bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
 	return false;
 }
 
-Vec2 get_point_from_last_radius(Vec2 &point, double last_radius, Circle2 &temp_circle) {
-		Vec2 v = { point.x - temp_circle.center.x, point.y - temp_circle.center.y };
-		Vec2 v_normal = v.normalize();
-		Vec2 circum_point = { temp_circle.center.x + v_normal.x * last_radius,
-			temp_circle.center.y + v_normal.y * last_radius };
-		return circum_point;
-}
-
 void mode_operations(AppState &app, Vec2 &point) {
   switch (app.mode) {
   case AppMode::NORMAL:
@@ -510,7 +508,6 @@ void mode_operations(AppState &app, Vec2 &point) {
 		break;
 	}
 }
-
 
 void Shapes::construct(AppState &app, Vec2 &point) {
   switch (app.mode) {
@@ -545,7 +542,7 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 							last_radius = circle.radius();
 						}
 					}
-					temp_circle.circum_point = get_point_from_last_radius(point, last_radius, temp_circle);
+					temp_circle.set_circum_point(last_radius);
 				} else {
 					temp_circle.circum_point = point;
 				}
@@ -565,7 +562,7 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 						last_radius = circle.radius();
 					}
 				}
-				temp_circle.circum_point = get_point_from_last_radius(point, last_radius, temp_circle);
+				temp_circle.set_circum_point(last_radius);
 			} else {
 				temp_circle.circum_point = point;
 			}
@@ -1048,110 +1045,7 @@ vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
 		final_angle /= (2 * numbers::pi);
 		final_angles.push_back(final_angle);
 	}
-
-	// double angle {};
-
-	// for (int i = 0; i < angles.size() - 1; i++) {
-	// 	double this_angle = angles.at(i);
-	// 	double next_angle = angles.at(i + 1);
-	// 	if (direction_clockwise) {
-	// 		if (this_angle > next_angle) {
-	// 			angle = ((this_angle - next_angle) / (2 * numbers::pi));
-	// 		} else {
-	// 			angle = (((2 * numbers::pi + this_angle) - next_angle) / (2 * numbers::pi));
-	// 		}
-	// 	} else {
-	// 		if (this_angle < next_angle) {
-	// 			angle = ((next_angle - this_angle) / (2 * numbers::pi));
-	// 		} else {
-	// 			angle = (((2 * numbers::pi + next_angle) - this_angle) / (2 * numbers::pi));
-	// 		}
-	// 	}
-	// 	// angle_relations.push_back(1/angle); // 1/angle for phasor
-	// 	angle_relations.push_back(angle);
-	// }
-
-
-	// if (direction_clockwise) {
-	// 	if (angles.front() < angles.back()) {
-	// 		angle = ((angles.back() - angles.front()) / (2 * numbers::pi));
-	// 	} else {
-	// 		angle = ((2 * numbers::pi + angles.back()) - (angles.front()) / (2 * numbers::pi));
-	// 	}
-	// } else {
-	// 	if (angles.front() > angles.back()) {
-	// 		angle = ((angles.front() - angles.back()) / (2 * numbers::pi));
-	// 	} else {
-	// 		angle = (((2 * numbers::pi + angles.front()) - angles.back()) / (2 * numbers::pi));
-	// 	}
-	// }
-	// // angle_relations.push_back(1/angle); 	// 1/angle for phasor
-	// angle_relations.push_back(angle);
-
 	return final_angles;
-}
-
-vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle) {
-	vector<Vec2> points {};
-	vector<Vec2> pos_y {};
-	vector<Vec2> neg_y {};
-	vector<Vec2> angle_points{};
-	vector<double> angle_relations{};
-
-	// get all intersection points that lie on the circle
-	cout << "idpoints: " << endl;
-	for (auto &id_point : shapes.intersection_points) {
-		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
-										[&](const auto &id) { return id == circle.id; })) {
-			points.push_back(id_point.p);
-			cout << id_point.p.x << "," << id_point.p.y << " ";
-		}
-	}
-	cout << endl;
-
-	// fill vectors for upper and lower part of the circle
-	for (auto &point : points) {
-		if (point.y <= circle.center.y) {
-			pos_y.push_back(point);
-		} else {
-			neg_y.push_back(point);
-		}
-	}
-
-	// sort
-	std::sort(pos_y.begin(), pos_y.end(), [](Vec2 &p1, Vec2 &p2){
-			return p1.x > p2.x;});
-	std::sort(neg_y.begin(), neg_y.end(), [](Vec2 &p1, Vec2 &p2){
-			return p1.x < p2.x;});
-
-	angle_points.insert(angle_points.end(), pos_y.begin(), pos_y.end());
-	angle_points.insert(angle_points.end(), neg_y.begin(), neg_y.end());
-	angle_points.push_back(angle_points.front());
-
-	for (auto & angle_point : angle_points) {
-		for (auto & angle_point2 : angle_points) {
-			if (SDL_fabs(angle_point.x - angle_point2.x) < 2.0 && 
-					SDL_fabs(angle_point.x - angle_point2.x) > 0.001) {
-				cout << "LOW DIF: " << SDL_fabs(angle_point.x - angle_point2.x) << endl;
-			}
-			if (SDL_fabs(angle_point.y - angle_point2.y) < 2.0 &&
-					SDL_fabs(angle_point.y - angle_point2.y) > 0.001) {
-				cout << "LOW DIF: " << SDL_fabs(angle_point.y - angle_point2.y) << endl;
-			}
-		}
-	}
-
-	for (int i = 0; i < angle_points.size() - 1; i++) {
-		Vec2 p1 = angle_points.at(i);
-		Vec2 p2 = angle_points.at(i + 1);
-		double d = get_point_point_distance(p1, p2);
-
-		// kosinussatz
-		double angle = std::acos((2 * SDL_pow(circle.radius(), 2.0) - SDL_pow(d, 2.0)) /
-														 (2 * SDL_pow(circle.radius(), 2.0)));
-		angle_relations.push_back(angle);
-	}
-	return angle_relations;
 }
 
 // simple version, TODO: inplement Bresenham for better performance

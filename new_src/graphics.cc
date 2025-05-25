@@ -2,6 +2,7 @@
 #include "graphics.h"
 
 using namespace std;
+using namespace graphics;
 
 // Vec2 implementation, Point implementation
 Vec2 Vec2::normalize() {
@@ -58,4 +59,9 @@ double Line2::get_distance_point_to_seg(const Vec2 &plane_point) const {
 double Circle2::radius() const {
 	return SDL_sqrt(SDL_pow((center.x - circum_point.x), 2.0) +
 													 SDL_pow((center.y - circum_point.y), 2.0));
+}
+
+
+void Circle2::set_circum_point(const double &radius) {
+	circum_point = { center.x + radius, center.y };
 }
