@@ -1,5 +1,5 @@
 #pragma once
-#include "include.h"
+#include "core.h"
 
 namespace graphics {
 	constexpr uint32_t fg_color = 0x00000000;					//black
@@ -35,6 +35,7 @@ namespace graphics {
 	};
 
 	double get_point_point_distance(const Vec2 &p1, const Vec2 &p2);
+	double points_equal_with_pixel_epsilon(const Vec2 &p1, const Vec2 &p2);
 
 	// Line2 implementation
 	struct Line2 {

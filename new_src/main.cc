@@ -1,4 +1,4 @@
-#include "include.h"
+#include "core.h"
 #include "graphics.h"
 
 #define DEBUG_MODE
@@ -12,7 +12,6 @@ using graphics::ShapeState;
 
 constexpr const int gk_window_width = 1920/2;
 constexpr int gk_window_height = 1080/2;
-constexpr double gk_epsilon = 1e-6;
 
 // the application
 enum struct AppMode {
@@ -111,8 +110,8 @@ struct Shapes {
 	void pop_by_id(int id);
 	// void id_redist(); // if id_counter >= uint16_t max redist id's, not needed
 
-	vector<IdPoint> intersection_points;
-	vector<IdPoint> shape_defining_points;
+	vector<IdPoint> ixn_points;
+	vector<IdPoint> def_points;
 	// on object count change, recalculate snap points
 	// -> recalculate all is_points and append, take all vertex points and append
 };
@@ -274,7 +273,7 @@ void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	if (shapes.in_snap_distance) {
 		if (shapes.snap_is_id_point) {
-			for (auto &id_point : shapes.intersection_points) {
+			for (auto &id_point : shapes.ixn_points) {
 				if (id_point.p.x == shapes.snap_point.x &&
 						id_point.p.y == shapes.snap_point.y) {
 					cout << "IS Point: " << id_point.p.x << ", " << id_point.p.y << endl;
@@ -285,7 +284,7 @@ void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes)
 					cout << endl;
 				}
 			}
-			for (auto &id_point : shapes.shape_defining_points) {
+			for (auto &id_point : shapes.def_points) {
 				if (id_point.p.x == shapes.snap_point.x &&
 						id_point.p.y == shapes.snap_point.y) {
 					cout << "SD Point: " << id_point.p.x << ", " << id_point.p.y << endl;
@@ -449,7 +448,7 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 // Check for all id_points and shapes if cursor in snap_distance
 // If it is, set as snap point and return ture, return false if reach end
 bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
-	for (auto &is_point : shapes.intersection_points) {
+	for (auto &is_point : shapes.ixn_points) {
 		if (get_point_point_distance(is_point.p, app.mouse) < shapes.snap_distance) {
 			shapes.snap_point = is_point.p;
 			shapes.snap_is_id_point = true;
@@ -457,7 +456,7 @@ bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
 		}	
 	}
 
-	for (auto &shape_point : shapes.shape_defining_points) {
+	for (auto &shape_point : shapes.def_points) {
 		if (get_point_point_distance(shape_point.p, app.mouse) < shapes.snap_distance) {
 			shapes.snap_point = shape_point.p;
 			shapes.snap_is_id_point = true;
@@ -468,7 +467,7 @@ bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
 	for (auto &line : shapes.lines) {
 		if (line.get_distance_point_to_seg(app.mouse) < shapes.snap_distance) {
 			if (min(get_point_point_distance(app.mouse, line.p1),
-						get_point_point_distance(app.mouse, line.p1)) > shapes.snap_distance) {
+						get_point_point_distance(app.mouse, line.p2)) > shapes.snap_distance) {
 				shapes.snap_point = line.project_point_to_ray(app.mouse);
 				shapes.snap_is_id_point = false;
 				shapes.snap_id = line.id;
@@ -571,18 +570,13 @@ void Shapes::construct(AppState &app, Vec2 &point) {
 	}
 }
 
-bool equal_with_gk_epsilon(double x, double y) {
-	return (x < y + graphics::pixel_epsilon && x > y - graphics::pixel_epsilon);
-}
-
 // test if point and its id allready in id_points vector 
 // if intersection allready in id_points, not append or add id
 void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &point,
                            uint32_t shape_id) {
   bool point_dup = false;
   for (auto &id_point : id_points) {
-		if (equal_with_gk_epsilon(id_point.p.x, point.x) &&
-				equal_with_gk_epsilon(id_point.p.y, point.y)) {
+		if (points_equal_with_pixel_epsilon(id_point.p, point)) {
       point_dup = true;
       for (auto &id : id_point.ids) {
 				if (shape_id == id) {
@@ -594,14 +588,9 @@ void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &poin
     }
   }
 	if (!point_dup) {
-		// TODO: i should drop error if outside screen
-		if (point.x < app.w_pixels && point.y < app.h_pixels) {
-			id_points.push_back(IdPoint{point, shape_id});
-			cout << "ID POINT APPENDED: " << point.x << "," << point.y << endl;
-		}
+		id_points.push_back(IdPoint{point, shape_id});
   }
 }
-
 
 // TODO:
 // snap points only appear when draw next object gets created
@@ -610,118 +599,60 @@ void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &poin
 // vectors at the moment that hold the same thing
 void gfx(AppState &app, Shapes &shapes) {
 	if (shapes.recalc) {
-		shapes.intersection_points.clear();
-		shapes.shape_defining_points.clear();
+		shapes.ixn_points.clear();
+		shapes.def_points.clear();
 
 		// [line-line intersections]
 		for (int i = 0; i < shapes.lines.size(); i++) {
-			Line2 &base_line = shapes.lines.at(i);
-			Vec2 p1 = { base_line.p1.x, base_line.p1.y };
-			Vec2 p2 = { base_line.p2.x, base_line.p2.y };
-			Vec2 a = base_line.get_a();
+			Line2 &l1 = shapes.lines.at(i);
 			for (int j = i+1; j < shapes.lines.size(); j++) {
-				Line2 &compare_line = shapes.lines.at(j);
-				Vec2 p3 = { compare_line.p1.x, compare_line.p1.y };
-				Vec2 p4 = { compare_line.p2.x, compare_line.p2.y };
-				Vec2 v = { (p4.x - p3.x), (p4.y - p3.y) };
-				Vec2 is_point {};
-				
-				// calculate the intersection TODO: add to notes how this works
-				double k = (-(-a.x * p1.x - a.y * p1.y) - a.x * p3.x -a.y * p3.y) /
-					(a.x * v.x + a.y * v.y);
-				is_point.x = p3.x + k * v.x;
-				is_point.y = p3.y + k * v.y;
-
-				if (base_line.check_point_within_seg_bounds(is_point) &&
-						compare_line.check_point_within_seg_bounds(is_point)) {
-					id_point_maybe_append(app, shapes.intersection_points, is_point, base_line.id);
-					id_point_maybe_append(app, shapes.intersection_points, is_point, compare_line.id);
+				Line2 &l2 = shapes.lines.at(j);
+				vector<Vec2> ixn_points = Line2_Line2_intersect(l1, l2);
+				for (auto &ixn_point : ixn_points) {
+					id_point_maybe_append(app, shapes.ixn_points,
+																ixn_point, l1.id);
+					id_point_maybe_append(app, shapes.ixn_points,
+																ixn_point, l2.id);
 				}
 			}
 		}
 
 		// [line-circle intersections]
-		// TODO: no rule for line tangent to circle
-		// TODO: stop at line endpoints
 		for (int i = 0; i < shapes.circles.size(); i++) {
-			Circle2 &base_circle = shapes.circles.at(i);
-			double radius = base_circle.radius();
+			Circle2 &c = shapes.circles.at(i);
 			for (int j = 0; j < shapes.lines.size(); j++) {
-				Line2 &compare_line = shapes.lines.at(j);
-				Vec2 p1 = { compare_line.p1.x, compare_line.p1.y };
-				Vec2 p2 = { compare_line.p2.x, compare_line.p2.y };
-				Vec2 pq = { p2.x - p1.x , p2.y - p1.y };
-
-				double distance = compare_line.get_distance_point_to_ray(base_circle.center);
-				if (distance < radius) {
-					Vec2 closest_point = compare_line.project_point_to_ray(base_circle.center);
-					double hight = SDL_sqrt(SDL_fabs(SDL_pow(radius, 2.0) - SDL_pow(distance, 2.0)));
-					Vec2 pq_normal = pq.normalize();
-
-					Vec2 is_p1 { closest_point.x + hight * pq_normal.x, 
-						closest_point.y + hight * pq_normal.y};
-					Vec2 is_p2 { closest_point.x - hight * pq_normal.x, 
-						closest_point.y - hight * pq_normal.y};
-
-					if (compare_line.check_point_within_seg_bounds(is_p1)) {
-						id_point_maybe_append(app, shapes.intersection_points, is_p1, compare_line.id);
-						id_point_maybe_append(app, shapes.intersection_points, is_p1, base_circle.id);
-					}
-					if (compare_line.check_point_within_seg_bounds(is_p2)) {
-						id_point_maybe_append(app, shapes.intersection_points, is_p2, compare_line.id);
-						id_point_maybe_append(app, shapes.intersection_points, is_p2, base_circle.id);
-					}
+				Line2 &l = shapes.lines.at(j);
+				vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(l, c);
+				for (auto &ixn_point : ixn_points) {
+					id_point_maybe_append(app, shapes.ixn_points, ixn_point, l.id);
+					id_point_maybe_append(app, shapes.ixn_points, ixn_point, c.id);
 				}
 			}
 		}
-	}
 
-	// [circle-circle intersections]
-	// TODO: breaks for circle inside circle
-	// TODO: no rule for touching in one point
-	for (int i = 0; i < shapes.circles.size(); i++) {
-		Circle2 &base_circle = shapes.circles.at(i);
-		for (int j = i+1; j < shapes.circles.size(); j++) {
-			Circle2 &compare_circle = shapes.circles.at(j);
-			double center_distance =
-					get_point_point_distance(base_circle.center, compare_circle.center);
-			// TODO !!!
-			if (center_distance < (base_circle.radius() + compare_circle.radius())) {
-				double base_meet_distance =
-						(SDL_pow(base_circle.radius(), 2.0) -
-						 SDL_pow(compare_circle.radius(), 2.0) +
-						 SDL_pow(center_distance, 2.0)) /
-						(2 * center_distance);
-				double h = SDL_sqrt(SDL_pow(base_circle.radius(), 2.0) -
-														SDL_pow(base_meet_distance, 2.0));
-
-				// TODO: all this need to be functions 
-				Vec2 v = { (compare_circle.center.x - base_circle.center.x), 
-										(compare_circle.center.y - base_circle.center.y) };
-				Vec2 v_normal = v.normalize();
-				Vec2 a_normal = { v_normal.y, -v_normal.x };
-
-				Vec2 meet_point = { base_circle.center.x + v_normal.x * base_meet_distance,
-					base_circle.center.y + v_normal.y * base_meet_distance };
-
-				Vec2 is_p1 = { meet_point.x + h * a_normal.x, meet_point.y + h * a_normal.y };
-				Vec2 is_p2 = { meet_point.x - h * a_normal.x, meet_point.y - h * a_normal.y };
-
-				id_point_maybe_append(app, shapes.intersection_points, is_p1, base_circle.id);
-				id_point_maybe_append(app, shapes.intersection_points, is_p2, base_circle.id);
-				id_point_maybe_append(app, shapes.intersection_points, is_p1, compare_circle.id);
-				id_point_maybe_append(app, shapes.intersection_points, is_p2, compare_circle.id);
+		// [circle-circle intersections]
+		// TODO: breaks for circle inside circle
+		// TODO: no rule for touching in one point
+		for (int i = 0; i < shapes.circles.size(); i++) {
+			Circle2 &c1 = shapes.circles.at(i);
+			for (int j = i+1; j < shapes.circles.size(); j++) {
+				Circle2 &c2 = shapes.circles.at(j);
+				vector<Vec2> ixn_points = Circle2_Circle2_intersect(c1, c2);
+				for (auto &ixn_point : ixn_points) {
+					id_point_maybe_append(app, shapes.ixn_points, ixn_point, c1.id);
+					id_point_maybe_append(app, shapes.ixn_points, ixn_point, c2.id);
+				}
 			}
 		}
 	}
 
 	// append all shape defining points to the IdPoints
 	for (auto &line : shapes.lines) {
-		id_point_maybe_append(app, shapes.shape_defining_points, line.p1, line.id);
-		id_point_maybe_append(app, shapes.shape_defining_points, line.p2, line.id);
+		id_point_maybe_append(app, shapes.def_points, line.p1, line.id);
+		id_point_maybe_append(app, shapes.def_points, line.p2, line.id);
 	}
 	for (auto &circle : shapes.circles) {
-		id_point_maybe_append(app, shapes.shape_defining_points, circle.center, circle.id);
+		id_point_maybe_append(app, shapes.def_points, circle.center, circle.id);
 	}
 
 
@@ -801,7 +732,7 @@ void gfx(AppState &app, Shapes &shapes) {
 		}
 		// this is only implemented for intersection points at the moment
 	} else if (app.mode == AppMode::SELECT && app.shift_set) {
-		for (auto & id_point : shapes.intersection_points) {
+		for (auto & id_point : shapes.ixn_points) {
 			double distance = get_point_point_distance(app.mouse, id_point.p);
 			if (distance < 20.0) {
 				if(app.mouse_click) {
@@ -893,7 +824,7 @@ vector<double> gen_line_relations(AppState &app, Shapes &shapes,
 
 	double max_distance = (get_point_point_distance(A, B));
 
-	for (auto &id_point : shapes.intersection_points) {
+	for (auto &id_point : shapes.ixn_points) {
 		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
 										[&](const auto &id) { return id == line.line.id; })) {
 			distances.push_back(get_point_point_distance(A, id_point.p));
@@ -901,12 +832,12 @@ vector<double> gen_line_relations(AppState &app, Shapes &shapes,
 	}
 
 	auto iter = find_if(distances.begin(), distances.end(), 
-			[](double d){ return fabs(d - 0.0) < gk_epsilon; });
+			[](double d){ return fabs(d - 0.0) < gk::epsilon; });
 	if (iter == distances.end()) {
 		distances.push_back(0.0);
 	}
 	iter = find_if(distances.begin(), distances.end(), 
-			[=](double d){ return fabs(d - max_distance) < gk_epsilon; });
+			[=](double d){ return fabs(d - max_distance) < gk::epsilon; });
 	if (iter != distances.end()) {
 		distances.erase(iter);
 	}
@@ -958,7 +889,7 @@ vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
 	vector<double> angle_relations {};
 
 	// fill all points into vector, if a point is selected put in front
-	for (auto &id_point : shapes.intersection_points) {
+	for (auto &id_point : shapes.ixn_points) {
 		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
 										[&](const auto &id) { return id == circle.circle.id; })) {
 			points.push_back(id_point.p);
@@ -1125,14 +1056,14 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 		}
 
 		// [draw circle around all intersetion points]
-		for (const auto &is_point : shapes.intersection_points) {
+		for (const auto &is_point : shapes.ixn_points) {
 			if (is_point.state == ShapeState::SELECTED) {
 				Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
 				draw_circle(app, pixels_locked, Circle2 {is_point.p, rad_point}, get_color(is_point.state));
 			}
 		}
 		// [draw circle around all shape points]
-		for (const auto &shape_point : shapes.shape_defining_points) {
+		for (const auto &shape_point : shapes.def_points) {
 			Vec2 rad_point = { shape_point.p.x + 20, shape_point.p.y };
 			// draw_circle(app, Circle2 {shape_point.p, rad_point}, pixels_locked); 
 		}
