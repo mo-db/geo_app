@@ -60,13 +60,27 @@ double Line2::get_distance_point_to_seg(const Vec2 &plane_point) const {
 
 // Circle2 implementation
 double Circle2::radius() const {
-	return sqrt(SDL_pow((center.x - circum_point.x), 2.0) +
-													 pow((center.y - circum_point.y), 2.0));
+  return sqrt(pow((center.x - circum_point.x), 2.0) +
+              pow((center.y - circum_point.y), 2.0));
 }
 
+double Circle2::get_angle_of_point(const Vec2 &point) const {
+  double angle = -std::atan2(point.y - center.y, point.x - center.x);
+	if (angle < 0) { angle += 2 * numbers::pi; }
+	return angle;
+}
 
 void Circle2::set_circum_point(const double &radius) {
 	circum_point = {center.x + radius, center.y};
+}
+void Circle2::set_exact_circum_point(const double &radius, const Vec2 &point) {
+	Vec2 v = Line2{center, point}.get_v().normalize();
+	circum_point = {v.x * radius, v.y * radius};
+}
+
+Vec2 Circle2::project_point(const Vec2 &point) const {
+	Vec2 v = Line2{center, point}.get_v().normalize();
+	return {center.x + v.x * radius(), center.y + v.y * radius()};
 }
 
 std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2) {

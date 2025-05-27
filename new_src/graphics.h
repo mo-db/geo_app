@@ -6,17 +6,16 @@ namespace graphics {
 	constexpr uint32_t bg_color = 0x00FFFFFF;					//white
 	constexpr uint32_t hl_color = 0x000000FF;					//blue
 	constexpr uint32_t sel_color = 0x00FF0000;				//red
-	constexpr uint32_t conceal_color = 0x006c6c6c;		//grey
+	constexpr uint32_t conceal_color = 0x00CCCCCC;		//grey
 	constexpr uint32_t gen_color = 0x000000FF;				//blue
 	constexpr uint32_t edit_color = 0x0000FF00;				//green
 	constexpr double pixel_epsilon = 0.5;
 
-	enum struct ShapeState {
-		NORMAL,
-		HIGHLIGHTED,
-		SELECTED,
-		CONCEALED,
-		GENSELECTED,
+	struct ShapeFlags {
+		bool selected = false;
+		bool concealed = false;
+		bool highlighted = false;
+		bool padding = false; // explicit padding to make address san not complain
 	};
 
 	// Vec2 implementation, Point implementation
@@ -26,23 +25,24 @@ namespace graphics {
 		Vec2 normalize();
 	};
 
+	double get_point_point_distance(const Vec2 &p1, const Vec2 &p2);
+	double points_equal_with_pixel_epsilon(const Vec2 &p1, const Vec2 &p2);
+
+	// IdPoint implementation
 	struct IdPoint {
 		Vec2 p;
 		std::vector<uint32_t> ids;
-		ShapeState state = ShapeState::NORMAL;
+		ShapeFlags flags;
 		IdPoint() = default;
 		IdPoint(Vec2 &p, uint32_t id) : p{p}, ids{id} {}
 	};
-
-	double get_point_point_distance(const Vec2 &p1, const Vec2 &p2);
-	double points_equal_with_pixel_epsilon(const Vec2 &p1, const Vec2 &p2);
 
 	// Line2 implementation
 	struct Line2 {
 		Vec2 p1 {};
 		Vec2 p2 {};
 		uint32_t id {};
-		ShapeState state { ShapeState::NORMAL };
+		ShapeFlags flags;
 		Line2() = default;
 		Line2(Vec2 p1) : p1 {p1} {}
 		Line2(Vec2 p1, Vec2 p2) : p1 {p1}, p2 {p2} {}
@@ -59,13 +59,32 @@ namespace graphics {
 		Vec2 center {};
 		Vec2 circum_point {};
 		uint32_t id {};
-		ShapeState state = ShapeState::NORMAL;
-		Circle2() {}
+		ShapeFlags flags;
+		Circle2() = default;
 		Circle2(Vec2 center) : center {center} {}
 		Circle2(Vec2 center, Vec2 circum_point)
 			: center {center}, circum_point {circum_point} {}
 		double radius() const;
+		double get_angle_of_point(const Vec2 &p) const;
+		Vec2 project_point(const Vec2 &p) const;
 		void set_circum_point(const double &radius);
+		void set_exact_circum_point(const double &radius, const Vec2 &point);
+	};
+
+	struct Arc2 : public Circle2 {
+		// Circle2 circle;
+		Vec2 end_point {};
+		double start_angle {};  // computed from circum_point
+		double end_angle {};    // computed from end_pt
+
+		// constructors are not inherited by default
+		Arc2() = default;
+		Arc2(Vec2 center, Vec2 circum_point, Vec2 end_pt)
+				: Circle2(center, circum_point), end_point(end_pt) {
+			start_angle = atan2(circum_point.y - center.y, 
+													circum_point.x - center.x);
+			end_angle = atan2(end_pt.y - center.y, end_pt.x - center.x);
+		}
 	};
 
 	std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2);

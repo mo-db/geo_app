@@ -8,7 +8,8 @@ using graphics::Vec2;
 using graphics::IdPoint;
 using graphics::Line2;
 using graphics::Circle2;
-using graphics::ShapeState;
+using graphics::Arc2;
+using graphics::ShapeFlags;
 
 constexpr const int gk_window_width = 1920/2;
 constexpr int gk_window_height = 1080/2;
@@ -18,6 +19,7 @@ enum struct AppMode {
   NORMAL,
   LINE,
 	CIRCLE,
+	ARC,
 	SELECT,
 	GENSELECT,
 	EDIT,
@@ -38,31 +40,13 @@ struct AppState {
   bool mouse_right_down = false;
 	bool mouse_click = false;
 	bool shift_set = false;
+	bool ctrl_set = false;
 
 	void frame_reset() { 
 		mouse_click = false;
 	};
 
 };
-
-string state_to_string(ShapeState &state) {
-  string s{};
-  switch (state) {
-  case ShapeState::NORMAL:
-    s = "NORMAL";
-    break;
-  case ShapeState::HIGHLIGHTED:
-    s = "HIGHLIGHTED";
-    break;
-  case ShapeState::SELECTED:
-    s = "SELECTED";
-    break;
-  case ShapeState::CONCEALED:
-    s = "CONCEALED";
-    break;
-  }
-	return s;
-}
 
 enum struct GenDirection {
 	UP,			// line
@@ -72,17 +56,50 @@ enum struct GenDirection {
 };
 
 // each shape holds id, all snap points have list of id's of shapes
+enum struct InConstruction { NONE, LINE, CIRCLE, ARC, };
+enum struct PtSet { NONE, FIRST, SECOND, };
 struct Shapes {
 	vector<Line2> lines;
 	Line2 temp_line {};
 	Line2 edit_line {};
 	int edit_line_point {};
+	bool line_in_construction = false;
+	bool line_in_edit = false;
 
 	vector<Circle2> circles;
 	Circle2 temp_circle {};
+	bool circle_in_construction = false;
+	bool circle_in_edit = false;
+
+	vector<Arc2> arcs;
+	Arc2 temp_arc {};
+	bool arc_first_set;
+	bool arc_in_construction = false;
+	bool arc_in_edit = false;
+
+	InConstruction in_construction = InConstruction::NONE;
+	PtSet pt_set = PtSet::NONE;
+
+	double length_last_selected_line() const;
+	double radius_last_selected_circle() const;
+	void construct_line(AppState &app, Vec2 const &pt);
+	void construct_circle(AppState &app, Vec2 const &pt);
+	void construct_arc(AppState &app, Vec2 const &pt);
+
+	void construct(AppState &, const Vec2 &point);
+	void clear_construction() {
+		in_construction = InConstruction::NONE;
+		pt_set = PtSet::NONE;
+		line_in_construction = false;
+		circle_in_construction = false;
+		arc_in_construction = false;
+		arc_first_set = false;
+	}
+
+	// id related
 	uint32_t id_counter {};
 	bool quantity_change = false;
-	bool recalc = false;
+	bool recalculate = false;
 
 	Vec2 snap_point {};
 	double snap_distance = 20.0;
@@ -97,14 +114,7 @@ struct Shapes {
 	// gen_map holds shape id and direction point 
 	map<int, Vec2> gen_map {};
 
-	bool line_in_construction = false;
-	bool line_in_edit = false;
-	bool circle_in_construction = false;
-	void construct(AppState &, Vec2 &point); // dependent on app mode, id++
-	void clear_construction() {
-		line_in_construction = false;
-		circle_in_construction = false;
-	}
+
 
 	void pop_selected(AppState &app);
 	void pop_by_id(int id);
@@ -127,9 +137,16 @@ struct GenCircle {
 	Vec2 dir_point {};
 };
 
+struct GenArc {
+	Arc2 arc;
+	Vec2 start_point {};
+	Vec2 dir_point {};
+};
+
 struct GenShapes {
 	vector<GenLine> lines;
 	vector<GenCircle> circles;
+	vector<GenArc> arcs;
 	bool start_set = false;
 	Vec2 start_point {};
 };
@@ -140,7 +157,11 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 void reset_states(AppState &, Shapes &);
 
 void create_shapes(AppState &app, Shapes &shapes);
-uint32_t get_color(const ShapeState &);
+uint32_t get_color(const ShapeFlags &flags);
+
+void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points,
+													 Vec2 &point, uint32_t shape_id);
+void calculate_id_points(AppState &app, Shapes &shapes);
 
 void gfx(AppState &app, Shapes &shapes);
 void update(AppState &app, Shapes &shapes);
@@ -150,6 +171,8 @@ void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes)
 void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 
 // delete
+
+double get_angle_circum_point(Circle2 &circle, Vec2 &point);
 vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle);
 
 vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
@@ -202,6 +225,10 @@ int main() {
 
 		if(app.mode == AppMode::NORMAL && app.mouse_click) {
 			get_under_cursor_info(app, shapes, gen_shapes);
+		}
+
+		if (shapes.recalculate) {
+			calculate_id_points(app, shapes);
 		}
 
 		gfx(app, shapes);
@@ -270,6 +297,7 @@ void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	}
 }
 
+// TODO move somewhere else! -> print info if key event in info mode also
 void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	if (shapes.in_snap_distance) {
 		if (shapes.snap_is_id_point) {
@@ -313,6 +341,11 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 						app.shift_set = false;
 					}
 					break;
+				case SDLK_LCTRL:
+					if (!event.key.repeat) {
+						app.ctrl_set = false;
+					}
+					break;
 			}
 			break;
 		case SDL_EVENT_KEY_DOWN:
@@ -322,12 +355,23 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 						app.shift_set = true;
 					}
 					break;
+				case SDLK_LCTRL:
+					if (!event.key.repeat) {
+						app.ctrl_set = true;
+					}
+					break;
         case SDLK_ESCAPE:
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
             app.mode = AppMode::NORMAL;
           }
           break;
+				case SDLK_A:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.mode = AppMode::ARC;
+          }
+					break;
 				case SDLK_C:
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
@@ -362,9 +406,9 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
           if (!event.key.repeat) {
 						if (app.mode == AppMode::NORMAL) {
 							shapes.lines.erase(remove_if(shapes.lines.begin(), shapes.lines.end(),
-									[](const Line2 &line){ return line.state == ShapeState::SELECTED; }), shapes.lines.end());
+									[](const Line2 &line){ return line.flags.selected; }), shapes.lines.end());
 							shapes.circles.erase(remove_if(shapes.circles.begin(), shapes.circles.end(),
-									[](const Circle2 &circle){ return circle.state == ShapeState::SELECTED; }), shapes.circles.end());
+									[](const Circle2 &circle){ return circle.flags.selected; }), shapes.circles.end());
 							shapes.quantity_change = true;
 						}
           }
@@ -401,32 +445,12 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 					if (!event.key.repeat) {
 						cout << "MOUSE: " << endl;
 						cout << app.mouse.x << "," << app.mouse.y << endl;
-						 cout << "circles:" << endl;
-						 for (auto circle : shapes.circles) {
-							 cout << "(" << circle.center.x << ", "
-								 << circle.center.y << ")" << endl;
-						 }
-						 cout << endl;
-						 cout << "lines:" << endl;
-						 for (auto line : shapes.lines) {
-							 string state {};
-							 switch (line.state) {
-								 case ShapeState::NORMAL: state = "NORMAL"; break;
-								 case ShapeState::HIGHLIGHTED: state = "HIGHLIGHTED"; break;
-								 case ShapeState::SELECTED: state = "SELECTED"; break;
-								 case ShapeState::CONCEALED: state = "CONCEALED"; break;
-							 }
-							 cout << "(" << line.p1.x << ", " << line.p1.y << ")"
-								 << " | " << "(" << line.p2.x << ", " << line.p2.y << ")"
-								 << " state: " << state << endl;
-						 }
-						 cout << endl;
-						 cout << "app mode: ";
-						 switch (app.mode) {
-							 case AppMode::NORMAL: cout << "normal" << endl; break;
-							 case AppMode::LINE: cout << "line" << endl; break;
-							 case AppMode::CIRCLE: cout << "cricle" << endl; break;
-						 }
+						for (auto &line :shapes.lines) {
+							if (line.flags.selected) { cout << "sel, "; }
+							if (line.flags.concealed) { cout << "conccealed, "; }
+							if (line.flags.highlighted) { cout << "highlighed, "; }
+						}
+						cout << endl;
 					}
 					break;
 			}
@@ -497,77 +521,148 @@ bool maybe_set_snap_point(AppState &app, Shapes &shapes) {
 	return false;
 }
 
-void mode_operations(AppState &app, Vec2 &point) {
-  switch (app.mode) {
-  case AppMode::NORMAL:
-    break;
-	case AppMode::SELECT:
-		if (app.shift_set) {
+double Shapes::length_last_selected_line() const {
+  for (auto const &line : lines) {
+    if (line.flags.selected) {
+			return graphics::get_point_point_distance(line.p1, line.p2);
 		}
-		break;
+	}
+  return -1.;
+}
+
+double Shapes::radius_last_selected_circle() const {
+  for (auto const &circle : circles) {
+    if (circle.flags.selected) {
+      return circle.radius();
+		}
+	}
+  return -1.;
+}
+
+void Shapes::construct_line(AppState &app, Vec2 const &pt) {
+	if (app.mouse_click) {
+		if (pt_set == PtSet::FIRST) {
+			pt_set = PtSet::FIRST;
+			in_construction = InConstruction::LINE;
+			temp_line.p1 = pt;
+			temp_line.flags.concealed = app.ctrl_set;
+		} else {
+			if (app.shift_set) {
+				double last_length = length_last_selected_line();
+				if (last_length >= 0.) {
+					Vec2 v_normal = Line2{temp_line.p1, pt}.get_v().normalize();
+					temp_line.p2 = {temp_line.p1.x + v_normal.x * last_length, 
+													temp_line.p1.y + v_normal.y * last_length};
+				} else {
+					temp_line.p2 = pt;
+				}
+			} else {
+				temp_line.p2 = pt;
+			}
+			temp_line.id = id_counter++;
+			lines.push_back(temp_line);
+			quantity_change = true;
+			clear_construction();
+		}
+	} else if (pt_set == PtSet::FIRST) {
+		temp_line.p2 = pt;
 	}
 }
 
-void Shapes::construct(AppState &app, Vec2 &point) {
-  switch (app.mode) {
-  case AppMode::NORMAL:
-    break;
-  case AppMode::LINE:
-		if (app.mouse_click) {
-      if (!line_in_construction) {
-				temp_line.p1 = point;
-        line_in_construction = true;
-			} else {
-				temp_line.p2 = point;
-				temp_line.id = id_counter++;
-        lines.push_back(temp_line);
-				quantity_change = true;
-        line_in_construction = false;
-			}
-		} else if (line_in_construction) {
-			temp_line.p2 = point;
-		}
-    break;
-	case AppMode::CIRCLE:
-		if (app.mouse_click) {
-      if (!circle_in_construction) {
-				temp_circle.center = point;
-        circle_in_construction = true;
-			} else {
-				if (app.shift_set) {
-					double last_radius {};
-					for (auto &circle : circles) {
-						if (circle.state == ShapeState::SELECTED) {
-							last_radius = circle.radius();
-						}
-					}
-					temp_circle.set_circum_point(last_radius);
-				} else {
-					temp_circle.circum_point = point;
-				}
-
-				temp_circle.id = id_counter++;
-        circles.push_back(temp_circle);
-				quantity_change = true;
-        circle_in_construction = false;
-			}
-		} else if (circle_in_construction) {
-			// if i wanna have this to work for last selected shape
-			// i probably have to put selected shapes into a vector instead of status
+void Shapes::construct_circle(AppState &app, Vec2 const &pt) {
+	if (app.mouse_click) {
+		if (pt_set == PtSet::NONE) {
+			temp_circle.center = pt;
+			temp_circle.flags.concealed = app.ctrl_set;
+			in_construction = InConstruction::CIRCLE;
+			pt_set = PtSet::FIRST;
+		} else if (pt_set == PtSet::FIRST) {
 			if (app.shift_set) {
-				double last_radius {};
-				for (auto &circle : circles) {
-					if (circle.state == ShapeState::SELECTED) {
-						last_radius = circle.radius();
-					}
+				double last_radius = radius_last_selected_circle();
+				if (last_radius >= 0.) {
+					temp_circle.set_exact_circum_point(last_radius, pt);
+				} else {
+					temp_circle.circum_point = pt;
 				}
-				temp_circle.set_circum_point(last_radius);
 			} else {
-				temp_circle.circum_point = point;
+				temp_circle.circum_point = pt;
 			}
+			temp_circle.id = id_counter++;
+			circles.push_back(temp_circle);
+			quantity_change = true;
+			clear_construction();
 		}
-    break;
+	} else if (pt_set == PtSet::FIRST) {
+		if (app.shift_set) {
+			double last_radius = radius_last_selected_circle();
+			if (last_radius >= 0.) {
+				temp_circle.set_exact_circum_point(last_radius, pt);
+			} else {
+				temp_circle.circum_point = pt;
+			}
+		} else {
+			temp_circle.circum_point = pt;
+		}
 	}
+}
+
+void Shapes::construct_arc(AppState &app, Vec2 const &pt) {
+	if (app.mouse_click) {
+		if (pt_set == PtSet::NONE) {
+			pt_set = PtSet::FIRST;
+			in_construction = InConstruction::ARC;
+			temp_arc.center = pt;
+			temp_arc.flags.concealed = app.ctrl_set;
+		} else if (pt_set == PtSet::FIRST) {
+			pt_set = PtSet::SECOND;
+			if (app.shift_set) {
+				double last_radius = radius_last_selected_circle();
+				if (last_radius >= 0.) {
+					temp_arc.set_exact_circum_point(last_radius, pt);
+				} else {
+					temp_arc.circum_point = pt;
+				}
+			} else {
+				temp_arc.circum_point = pt;
+			}
+		} else if (pt_set == PtSet::SECOND) {
+			// Vec2 v = Line2{temp_circle.center, pt}.get_v().normalize();
+			// double radius = temp_arc.radius();
+			// temp_arc.end_point = {v.x * radius, v.y * radius};
+			temp_arc.end_point = temp_arc.project_point(pt);
+
+			temp_arc.start_angle = temp_arc.get_angle_of_point(temp_arc.circum_point);
+			temp_arc.end_angle = temp_arc.get_angle_of_point(temp_arc.end_point);
+			temp_arc.id = id_counter++;
+			arcs.push_back(temp_arc);
+			quantity_change = true;
+			clear_construction();
+		}
+	} else if (pt_set == PtSet::FIRST) {
+		if (app.shift_set) {
+			double last_radius = radius_last_selected_circle();
+			if (last_radius >= 0.) {
+				temp_arc.set_exact_circum_point(last_radius, pt);
+			} else {
+				temp_arc.circum_point = pt;
+			}
+		} else {
+			temp_arc.circum_point = pt;
+		}
+	} else if (pt_set == PtSet::SECOND) {
+		Vec2 v = Line2{temp_circle.center, pt}.get_v().normalize();
+		double radius = temp_arc.radius();
+		temp_arc.end_point = {v.x * radius, v.y * radius};
+	}
+}
+
+void Shapes::construct(AppState &app, Vec2 const &pt) {
+  switch (app.mode) {
+    case AppMode::NORMAL:    return;
+    case AppMode::LINE:      construct_line(app, pt);   break;
+    case AppMode::CIRCLE:    construct_circle(app, pt); break;
+    case AppMode::ARC:       construct_arc(app, pt);    break;
+  }
 }
 
 // test if point and its id allready in id_points vector 
@@ -592,72 +687,66 @@ void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &poin
   }
 }
 
-// TODO:
-// snap points only appear when draw next object gets created
-// circle-line, circle-circle
-// only the circle marker vector to hold snap points -> i have two
-// vectors at the moment that hold the same thing
-void gfx(AppState &app, Shapes &shapes) {
-	if (shapes.recalc) {
-		shapes.ixn_points.clear();
-		shapes.def_points.clear();
-
-		// [line-line intersections]
-		for (int i = 0; i < shapes.lines.size(); i++) {
-			Line2 &l1 = shapes.lines.at(i);
-			for (int j = i+1; j < shapes.lines.size(); j++) {
-				Line2 &l2 = shapes.lines.at(j);
-				vector<Vec2> ixn_points = Line2_Line2_intersect(l1, l2);
-				for (auto &ixn_point : ixn_points) {
-					id_point_maybe_append(app, shapes.ixn_points,
-																ixn_point, l1.id);
-					id_point_maybe_append(app, shapes.ixn_points,
-																ixn_point, l2.id);
-				}
-			}
-		}
-
-		// [line-circle intersections]
-		for (int i = 0; i < shapes.circles.size(); i++) {
-			Circle2 &c = shapes.circles.at(i);
-			for (int j = 0; j < shapes.lines.size(); j++) {
-				Line2 &l = shapes.lines.at(j);
-				vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(l, c);
-				for (auto &ixn_point : ixn_points) {
-					id_point_maybe_append(app, shapes.ixn_points, ixn_point, l.id);
-					id_point_maybe_append(app, shapes.ixn_points, ixn_point, c.id);
-				}
-			}
-		}
-
-		// [circle-circle intersections]
-		// TODO: breaks for circle inside circle
-		// TODO: no rule for touching in one point
-		for (int i = 0; i < shapes.circles.size(); i++) {
-			Circle2 &c1 = shapes.circles.at(i);
-			for (int j = i+1; j < shapes.circles.size(); j++) {
-				Circle2 &c2 = shapes.circles.at(j);
-				vector<Vec2> ixn_points = Circle2_Circle2_intersect(c1, c2);
-				for (auto &ixn_point : ixn_points) {
-					id_point_maybe_append(app, shapes.ixn_points, ixn_point, c1.id);
-					id_point_maybe_append(app, shapes.ixn_points, ixn_point, c2.id);
-				}
+// append shape-defining and ixn_points to the IdPoints vector
+void calculate_id_points(AppState &app, Shapes &shapes) {
+	shapes.ixn_points.clear();
+	shapes.def_points.clear();
+	// append line-line intersections
+	for (int i = 0; i < shapes.lines.size(); i++) {
+		Line2 &l1 = shapes.lines.at(i);
+		for (int j = i+1; j < shapes.lines.size(); j++) {
+			Line2 &l2 = shapes.lines.at(j);
+			vector<Vec2> ixn_points = Line2_Line2_intersect(l1, l2);
+			for (auto &ixn_point : ixn_points) {
+				id_point_maybe_append(app, shapes.ixn_points,
+															ixn_point, l1.id);
+				id_point_maybe_append(app, shapes.ixn_points,
+															ixn_point, l2.id);
 			}
 		}
 	}
-
-	// append all shape defining points to the IdPoints
+	// append line-circle intersections
+	for (int i = 0; i < shapes.circles.size(); i++) {
+		Circle2 &c = shapes.circles.at(i);
+		for (int j = 0; j < shapes.lines.size(); j++) {
+			Line2 &l = shapes.lines.at(j);
+			vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(l, c);
+			for (auto &ixn_point : ixn_points) {
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, l.id);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c.id);
+			}
+		}
+	}
+	// append circle-circle intersections
+	for (int i = 0; i < shapes.circles.size(); i++) {
+		Circle2 &c1 = shapes.circles.at(i);
+		for (int j = i+1; j < shapes.circles.size(); j++) {
+			Circle2 &c2 = shapes.circles.at(j);
+			vector<Vec2> ixn_points = Circle2_Circle2_intersect(c1, c2);
+			for (auto &ixn_point : ixn_points) {
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c1.id);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c2.id);
+			}
+		}
+	}
+	// append shape-defining points
 	for (auto &line : shapes.lines) {
 		id_point_maybe_append(app, shapes.def_points, line.p1, line.id);
 		id_point_maybe_append(app, shapes.def_points, line.p2, line.id);
 	}
 	for (auto &circle : shapes.circles) {
 		id_point_maybe_append(app, shapes.def_points, circle.center, circle.id);
+		id_point_maybe_append(app, shapes.def_points, circle.circum_point, circle.id);
 	}
+	for (auto &arc : shapes.arcs) {
+		id_point_maybe_append(app, shapes.def_points, arc.center, arc.id);
+		id_point_maybe_append(app, shapes.def_points, arc.circum_point, arc.id);
+		id_point_maybe_append(app, shapes.def_points, arc.end_point, arc.id);
+	}
+}
 
-
+void gfx(AppState &app, Shapes &shapes) {
 	// line edit feature
-
 	if (app.mode == AppMode::EDIT && !shapes.line_in_edit) {
 		// need extra edit mode and select only one line at a time here
 		for (int i = 0; i < shapes.lines.size(); i++) {
@@ -691,11 +780,9 @@ void gfx(AppState &app, Shapes &shapes) {
 		}
 	}
 
-
-
 	// [selection processing]
 	if (app.mode == AppMode::SELECT && !app.shift_set) {
-		// maybe select lines
+		// maybe select line
 		for (auto &line : shapes.lines) {
 			Vec2 a = line.get_a();
 			double distance = SDL_fabs((a.x * app.mouse.x + a.y * app.mouse.y +
@@ -707,10 +794,10 @@ void gfx(AppState &app, Shapes &shapes) {
 					app.mouse.x <= max(line.p1.x, line.p2.x))) {
 
 				if(app.mouse_click) {
-					if (line.state == ShapeState::SELECTED) {
-						line.state = ShapeState::NORMAL;
+					if (line.flags.selected) {
+						line.flags.selected = false;
 					} else {
-						line.state = ShapeState::SELECTED;
+						line.flags.selected = true;
 					}
 				}
 			}
@@ -722,24 +809,24 @@ void gfx(AppState &app, Shapes &shapes) {
 
 			if (d < circle.radius() + 20.0 && d > circle.radius() - 20.0) {
 				if(app.mouse_click) {
-					if (circle.state == ShapeState::SELECTED) {
-						circle.state = ShapeState::NORMAL;
+					if (circle.flags.selected) {
+						circle.flags.selected = false;
 					} else {
-						circle.state = ShapeState::SELECTED;
+						circle.flags.selected = true;
 					}
 				}
 			}
 		}
-		// this is only implemented for intersection points at the moment
+		// maybe selext ixn_point
 	} else if (app.mode == AppMode::SELECT && app.shift_set) {
 		for (auto & id_point : shapes.ixn_points) {
 			double distance = get_point_point_distance(app.mouse, id_point.p);
 			if (distance < 20.0) {
 				if(app.mouse_click) {
-					if (id_point.state == ShapeState::SELECTED) {
-						id_point.state = ShapeState::NORMAL;
+					if (id_point.flags.selected) {
+						id_point.flags.selected = false;
 					} else {
-						id_point.state = ShapeState::SELECTED;
+						id_point.flags.selected = true;
 					}
 				}
 			}
@@ -778,24 +865,20 @@ void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
   }
 }
 
-uint32_t get_color(const ShapeState &state) {
-	switch (state) {
-		case ShapeState::NORMAL:
-			return graphics::fg_color;
-			break;
-		case ShapeState::HIGHLIGHTED:
-			return graphics::hl_color;
-			break;
-		case ShapeState::SELECTED:
-			return graphics::sel_color;
-			break;
-		case ShapeState::CONCEALED:
-			return graphics::conceal_color;
-			break;
+// NOTE move this into graphics namespace, sorted after importance of color
+uint32_t get_color(const ShapeFlags &flags) {
+	if (flags.selected) {
+		return graphics::sel_color; 
+	} else if (flags.concealed) {
+		return graphics::conceal_color;
+	} else if (flags.highlighted) {
+		return graphics::hl_color;
+	} else {
+		return graphics::fg_color;
 	}
 }
 
-// TODO: maybe create custom datatype?, returns 1,2,3 or 4
+// TODO: depreciated?
 int get_quad_of_point_on_circle(Vec2 &center, Vec2 &point) {
 	if (point.x >= center.x && point.y <= center.y) {
 		return 0;
@@ -1038,6 +1121,55 @@ void draw_circle(AppState &app, uint32_t *pixel_buf, const Circle2 &circle, uint
 	}
 }
 
+// helper—assumes all angles normalized to [0,2π)
+inline bool angle_in_range(double a, double start, double end) {
+    if (end >= start) {
+        return (a >= start && a <= end);
+    } else {
+        // wraps around 2π → 0
+        return (a >= start || a <= end);
+    }
+}
+
+// TODO: improve simple version for dy sides, TODO: Implement Bresenham
+void draw_arc(AppState &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color) {
+    double cx = arc.center.x;
+    double cy = arc.center.y;
+    double r  = arc.radius();
+
+    for (int x = SDL_lround(cx - r);
+         x <= SDL_lround(cx + r);
+         ++x)
+    {
+        double dx = x - cx;
+        double v = r*r - dx*dx;
+        if (v < 0) v = 0;
+        int dy = SDL_lround(std::sqrt(v));
+
+        // two candidate y’s
+        int y_t = SDL_lround(cy - dy);
+        int y_b = SDL_lround(cy + dy);
+
+        // draw top point if it lies on the arc
+        if (x >= 0 && x < app.w_pixels && y_t >= 0 && y_t < app.h_pixels) {
+						double ang = std::atan2(cy - y_t, dx);
+            if (ang < 0) ang += 2 * numbers::pi;
+            if (angle_in_range(ang, arc.start_angle, arc.end_angle)) {
+                pixel_buf[y_t * app.w_pixels + x] = color;
+            }
+        }
+
+        // draw bottom point if on the arc
+        if (x >= 0 && x < app.w_pixels && y_b >= 0 && y_b < app.h_pixels) {
+            double ang = std::atan2(cy - y_b, dx);
+            if (ang < 0) ang += 2 * numbers::pi;
+            if (angle_in_range(ang, arc.start_angle, arc.end_angle)) {
+                pixel_buf[y_b * app.w_pixels + x] = color;
+            }
+        }
+    }
+}
+
 // in the shapes keyword i want to have lines or circles or other stuff
 void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	auto t1 = std::chrono::high_resolution_clock::now();
@@ -1049,23 +1181,26 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 
 		// [draw all finished shapes]
 		for (const auto &line : shapes.lines) {
-			draw_line(app, pixels_locked, line, get_color(line.state));
+			draw_line(app, pixels_locked, line, get_color(line.flags));
 		}
 		for (const auto &circle : shapes.circles) {
-			draw_circle(app, pixels_locked, circle, get_color(circle.state));
+			draw_circle(app, pixels_locked, circle, get_color(circle.flags));
+		}
+		for (const auto &arc : shapes.arcs) {
+			draw_arc(app, pixels_locked, arc, get_color(arc.flags));
 		}
 
 		// [draw circle around all intersetion points]
 		for (const auto &is_point : shapes.ixn_points) {
-			if (is_point.state == ShapeState::SELECTED) {
+			if (is_point.flags.selected) {
 				Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
-				draw_circle(app, pixels_locked, Circle2 {is_point.p, rad_point}, get_color(is_point.state));
+				draw_circle(app, pixels_locked, Circle2 {is_point.p, rad_point}, get_color(is_point.flags));
 			}
 		}
 		// [draw circle around all shape points]
 		for (const auto &shape_point : shapes.def_points) {
 			Vec2 rad_point = { shape_point.p.x + 20, shape_point.p.y };
-			// draw_circle(app, Circle2 {shape_point.p, rad_point}, pixels_locked); 
+			draw_circle(app, pixels_locked, Circle2 {shape_point.p, rad_point}, get_color(shape_point.flags));
 		}
 
 		// [draw circle around snap point]
@@ -1089,15 +1224,24 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 
 		// [draw the temporary shape from base to cursor live if in construction]
 		if (shapes.line_in_construction) {
-			draw_line(app, pixels_locked, shapes.temp_line, get_color(shapes.temp_line.state));
+			draw_line(app, pixels_locked, shapes.temp_line, get_color(shapes.temp_line.flags));
 		}
 
 		// draw edit line
-		if (shapes.line_in_edit) {
+		if (shapes.in_construction == InConstruction::LINE) {
 			draw_line(app, pixels_locked, shapes.edit_line, graphics::edit_color);
 		}
-		if (shapes.circle_in_construction) {
-			draw_circle(app, pixels_locked, shapes.temp_circle, get_color(shapes.temp_circle.state));
+		if (shapes.in_construction == InConstruction::CIRCLE) {
+			draw_circle(app, pixels_locked, shapes.temp_circle, get_color(shapes.temp_circle.flags));
+		}
+		if (shapes.in_construction == InConstruction::ARC) {
+			if (shapes.arc_first_set) {
+				draw_arc(app, pixels_locked, shapes.temp_arc, get_color(shapes.temp_arc.flags));
+			} else {
+				draw_line(app, pixels_locked, 
+									Line2{shapes.temp_arc.center, shapes.temp_arc.circum_point}, 
+									get_color(shapes.temp_arc.flags));
+			}
 		}
 
 		SDL_UnlockTexture(app.window_texture);
@@ -1112,9 +1256,9 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 
 void check_for_changes(AppState &app, Shapes &shapes) {
 	if (shapes.quantity_change) {
-		shapes.recalc = true;
+		shapes.recalculate = true;
 	} else {
-		shapes.recalc = false;
+		shapes.recalculate = false;
 	}
 	shapes.quantity_change = false;
 }
