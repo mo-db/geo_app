@@ -76,7 +76,8 @@ namespace graphics {
 		Vec2 end_point {};
 		double start_angle {};  // computed from circum_point
 		double end_angle {};    // computed from end_pt
-
+		bool clockwise = true;
+		
 		// constructors are not inherited by default
 		Arc2() = default;
 		Arc2(Vec2 center, Vec2 circum_point, Vec2 end_pt)
@@ -85,10 +86,15 @@ namespace graphics {
 													circum_point.x - center.x);
 			end_angle = atan2(end_pt.y - center.y, end_pt.x - center.x);
 		}
+		bool angle_between_arc_points(const double &angle) const;
 	};
 
 	std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2);
 	std::vector<Vec2> Line2_Circle2_intersect(const Line2 &l, const Circle2 &c);
 	std::vector<Vec2> Circle2_Circle2_intersect(const Circle2 &c1,
 																							const Circle2 &c2);
+	std::vector<Vec2> Arc2_Line2_intersect(const Arc2 &a, const Line2 &l);
+	std::vector<Vec2> Arc2_Circle2_intersect(const Arc2 &a, const Circle2 &c);
+	std::vector<Vec2> Arc2_Arc2_intersect(const Arc2 &a1,
+																							const Arc2 &a2);
 }

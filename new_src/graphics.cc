@@ -83,6 +83,23 @@ Vec2 Circle2::project_point(const Vec2 &point) const {
 	return {center.x + v.x * radius(), center.y + v.y * radius()};
 }
 
+bool Arc2::angle_between_arc_points(const double &angle) const {
+	if (clockwise) {
+		if (end_angle < start_angle) {
+			if (angle < start_angle && angle > end_angle) { return true; }
+		} else {
+			if (angle < start_angle || angle > end_angle) { return true; }
+		}
+	} else {
+		if (end_angle > start_angle) {
+			if (angle < start_angle && angle > end_angle) { return true; }
+		} else {
+			if (angle < start_angle || angle > end_angle) { return true; }
+		}
+	}
+	return false;
+}
+
 std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2) {
   Vec2 l1_a = l1.get_a();
   Vec2 l2_v = l2.get_v();
@@ -163,5 +180,37 @@ std::vector<Vec2> Circle2_Circle2_intersect(const Circle2 &c1,
 	} else {
 		return vector<Vec2> {};
 	}
+}
+std::vector<Vec2> Arc2_Line2_intersect(const Arc2 &a, const Line2 &l) {
+	vector<Vec2> ixn_points = Line2_Circle2_intersect(l, a);
+	for (auto iter = ixn_points.begin(); iter != ixn_points.end(); iter++) {
+		if (!a.angle_between_arc_points(a.get_angle_of_point(*iter))) {
+			ixn_points.erase(iter);
+		}
+	}
+	return ixn_points;
+}
+std::vector<Vec2> Arc2_Circle2_intersect(const Arc2 &a, const Circle2 &c) {
+	vector<Vec2> ixn_points = Circle2_Circle2_intersect(c, static_cast<Circle2>(a));
+	for (auto iter = ixn_points.begin(); iter != ixn_points.end(); iter++) {
+		if (!a.angle_between_arc_points(a.get_angle_of_point(*iter))) {
+			ixn_points.erase(iter);
+		}
+	}
+	return ixn_points;
+}
+std::vector<Vec2> Arc2_Arc2_intersect(const Arc2 &a1,	const Arc2 &a2) {
+	vector<Vec2> ixn_points =
+		Circle2_Circle2_intersect(static_cast<Circle2>(a1),
+															static_cast<Circle2>(a2));
+	for (auto iter = ixn_points.begin(); iter != ixn_points.end(); iter++) {
+		if (!a1.angle_between_arc_points(a1.get_angle_of_point(*iter))) {
+			ixn_points.erase(iter);
+		}
+		if (!a2.angle_between_arc_points(a2.get_angle_of_point(*iter))) {
+			ixn_points.erase(iter);
+		}
+	}
+	return ixn_points;
 }
 } // namespace graphics
