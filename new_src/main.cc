@@ -58,7 +58,7 @@ enum struct GenDirection {
 // each shape holds id, all snap points have list of id's of shapes
 enum struct InConstruction { NONE, LINE, CIRCLE, ARC, };
 enum struct PtSet { NONE, FIRST, SECOND, };
-enum struct SnapShape { NONE, ID_POINT, LINE, CIRCLE, ARC, };
+enum struct SnapShape { NONE, IXN_POINT, DEF_POINT, LINE, CIRCLE, ARC, };
 struct Shapes {
 	vector<Line2> lines;
 	Line2 temp_line {};
@@ -81,6 +81,8 @@ struct Shapes {
 	InConstruction in_construction = InConstruction::NONE;
 	PtSet pt_set = PtSet::NONE;
 
+	bool construct_concealed = false;
+
 	double length_last_selected_line() const;
 	double radius_last_selected_circle() const;
 	void construct_line(AppState &app, Vec2 const &pt);
@@ -91,10 +93,6 @@ struct Shapes {
 	void clear_construction() {
 		in_construction = InConstruction::NONE;
 		pt_set = PtSet::NONE;
-		line_in_construction = false;
-		circle_in_construction = false;
-		arc_in_construction = false;
-		arc_first_set = false;
 	}
 
 	// id related
@@ -107,20 +105,28 @@ struct Shapes {
 	Arc2 *get_arc_of_id(const int id);
 
 	const double snap_distance = 20.0; // why cant i do constexpr?
-	bool snap_to_id_pts = false;
+	bool snap_to_id_pts = true;
 
-	Vec2 snap_point {};
-	int snap_id {};
+	Vec2 snap_point;
+	int snap_id {}; // -1 if id_point
+	int snap_index {};
+	bool snap_is_id_point;
 	SnapShape snap_shape = SnapShape::NONE;
 	bool in_snap_distance = false;
 	bool update_snap(AppState &app);
 
+
 	bool gen_first_set = false;
 	Vec2 gen_point {};
+
+	vector<int> gen_start_point_ids {};
+	Vec2 gen_start_point {};
+	bool gen_start_set = false;
+
+
+
 	// gen_map holds shape id and direction point 
 	map<int, Vec2> gen_map {};
-
-
 
 	void pop_selected(AppState &app);
 	void pop_by_id(int id);
@@ -154,7 +160,7 @@ struct GenShapes {
 	vector<GenCircle> circles;
 	vector<GenArc> arcs;
 	bool start_set = false;
-	Vec2 start_point {};
+	IdPoint start_point {};
 };
 void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 
@@ -166,7 +172,7 @@ void create_shapes(AppState &app, Shapes &shapes);
 uint32_t get_color(const ShapeFlags &flags);
 
 void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points,
-													 Vec2 &point, uint32_t shape_id);
+													 Vec2 &point, int shape_id);
 void calculate_id_points(AppState &app, Shapes &shapes);
 
 void gfx(AppState &app, Shapes &shapes);
@@ -176,34 +182,18 @@ void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes)
 
 void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes);
 
-// delete
-
-double get_angle_circum_point(Circle2 &circle, Vec2 &point);
-vector<double> get_circle_angle_relations(AppState& app, Shapes &shapes, Circle2 &circle);
-
-vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
-                                          GenCircle &circle);
 vector<double> gen_line_relations(AppState &app, Shapes &shapes,
                                           GenLine &line);
+vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
+                                          GenCircle &circle);
+vector<double> gen_arc_relations(AppState &app, Shapes &shapes,
+                                          GenArc &arc);
 
 bool maybe_set_snap_point(AppState &app, Shapes &shapes);
 
-auto create_line(Shapes &shapes, Vec2 &p0, Vec2 &&p1)
-{
-	shapes.lines.push_back(Line2{ p0, p1}); // CHECK: is this valid?
-	cout << "Line Created, " << shapes.lines.size() << "lines" << endl;
-	return shapes.lines.end();
-}
-
-auto create_circle(Shapes &shapes, Vec2 &center, Vec2 &circum_point)
-{
-	shapes.circles.push_back(Circle2{ center, circum_point});
-	cout << "Circle Created, " << shapes.circles.size() << "circles" << endl;
-	return shapes.circles.end();
-}
-
-
 void check_for_changes(AppState &app, Shapes &shapes);
+
+void toogle_hl_of_id_points(Shapes &shapes);
 
 int main() {
 	AppState app;
@@ -215,10 +205,8 @@ int main() {
 	while(app.keep_running) {
 		app.frame_reset();
 		process_events(app, shapes, gen_shapes);
-
 		shapes.in_snap_distance = shapes.update_snap(app);
 
-		// TODO: this is bad, i check for snap distance at many places
 		if (shapes.in_snap_distance) {
 			shapes.construct(app, shapes.snap_point);
 		} else {
@@ -227,6 +215,9 @@ int main() {
 
 		if (app.mode == AppMode::GENSELECT && shapes.in_snap_distance && app.mouse_click) {
 			maybe_gen_select(app, shapes, gen_shapes);
+			if (shapes.snap_is_id_point && app.ctrl_set == true) {
+				toogle_hl_of_id_points(shapes);
+			}
 		}
 
 		if(app.mode == AppMode::NORMAL && app.mouse_click) {
@@ -286,9 +277,18 @@ int app_init(AppState &app) {
   return 1;
 }
 
+void clear_hl(Shapes &shapes) {
+	for (auto &ixn_point : shapes.ixn_points) {ixn_point.flags.highlighted = false;}
+	for (auto &def_point : shapes.def_points) {def_point.flags.highlighted = false;}
+	for (auto &line: shapes.lines) {line.flags.highlighted = false;}
+	for (auto &circle: shapes.circles) {circle.flags.highlighted = false;}
+	for (auto &arc: shapes.arcs) {arc.flags.highlighted = false;}
+}
+
 void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	// for all modes
 	shapes.clear_construction();
+	clear_hl(shapes);
 
 	// for gen select
 	if (app.mode == AppMode::GENSELECT) {
@@ -306,7 +306,7 @@ void mode_change_cleanup(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 // TODO move somewhere else! -> print info if key event in info mode also
 void get_under_cursor_info(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	if (shapes.in_snap_distance) {
-		if (shapes.snap_shape == SnapShape::ID_POINT) {
+		if (shapes.snap_shape == SnapShape::IXN_POINT) {
 			for (auto &id_point : shapes.ixn_points) {
 				if (id_point.p.x == shapes.snap_point.x &&
 						id_point.p.y == shapes.snap_point.y) {
@@ -369,17 +369,43 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
         case SDLK_ESCAPE:
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
+						// extra_cleanup()
             app.mode = AppMode::NORMAL;
           }
           break;
 				// mode key to toogle something when in specific app mode
         case SDLK_K:
+					//NOTE this has to be reset when switching mode -> add to const clear
           if (!event.key.repeat) {
-						if (shapes.in_construction == InConstruction::ARC) {
+						if (app.mode == AppMode::ARC) {
 							if (shapes.temp_arc.clockwise == true) {
 								shapes.temp_arc.clockwise = false;
 							} else {
 								shapes.temp_arc.clockwise = true;
+							}
+						}
+          }
+          break;
+        case SDLK_H:
+					//NOTE this has to be reset when switching mode
+          if (!event.key.repeat) {
+						if (app.mode == AppMode::LINE || app.mode == AppMode::LINE || app.mode == AppMode::ARC) {
+							if (shapes.construct_concealed == true) {
+								shapes.construct_concealed = false;
+							} else {
+								shapes.construct_concealed = true;
+							}
+						}
+          }
+          break;
+        case SDLK_U:
+					//NOTE this has to be reset when switching mode
+          if (!event.key.repeat) {
+						if (app.mode == AppMode::LINE || app.mode == AppMode::LINE || app.mode == AppMode::ARC) {
+							if (shapes.snap_to_id_pts == true) {
+								shapes.snap_to_id_pts = false;
+							} else {
+								shapes.snap_to_id_pts = true;
 							}
 						}
           }
@@ -437,13 +463,18 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 						vector<double> relations {};
 						vector<double> relations_merge {};
 
-						for (auto &circle : gen_shapes.circles) {
-							relations = gen_circle_relations(app, shapes, circle);
+						for (auto &gen : gen_shapes.circles) {
+							relations = gen_circle_relations(app, shapes, gen);
 							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
 						}
 
-						for (auto &line: gen_shapes.lines) {
-							relations = gen_line_relations(app, shapes, line);
+						for (auto &gen: gen_shapes.lines) {
+							relations = gen_line_relations(app, shapes, gen);
+							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
+						}
+
+						for (auto &gen : gen_shapes.arcs) {
+							relations = gen_arc_relations(app, shapes, gen);
 							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
 						}
 
@@ -487,28 +518,38 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	}
 }
 
+// update snap and return true if in_snap_distance
 bool Shapes::update_snap(AppState &app) {
+	snap_index = -1;
+	snap_point = {};
+	in_snap_distance = false;
+	snap_is_id_point = false;
+	snap_shape = SnapShape::NONE;
+
 	if (snap_to_id_pts) {
-		for (auto &is_point : ixn_points) {
-			if (get_point_point_distance(is_point.p, app.mouse) < snap_distance) {
-				snap_point = is_point.p;
-				snap_shape = SnapShape::ID_POINT;
-				snap_id = -1;
+		for (size_t index = 0; index < ixn_points.size(); index++) {
+			if (get_point_point_distance(ixn_points[index].p, app.mouse) < snap_distance) {
+				snap_point = ixn_points[index].p;
+				snap_shape = SnapShape::IXN_POINT;
+				snap_is_id_point = true;
+				snap_index = index;
 				return true;
 			}	
 		}
 
-		for (auto &def_point: def_points) {
-			if (get_point_point_distance(def_point.p, app.mouse) < snap_distance) {
-				snap_point = def_point.p;
-				snap_shape = SnapShape::ID_POINT;
-				snap_id = -1;
+		for (size_t index = 0; index < def_points.size(); index++) {
+			if (get_point_point_distance(def_points[index].p, app.mouse) < snap_distance) {
+				snap_point = def_points[index].p;
+				snap_shape = SnapShape::DEF_POINT;
+				snap_is_id_point = true;
+				snap_index = index;
 				return true;
-			}
+			}	
 		}
 	}
 
-	for (auto &line : lines) {
+	for (size_t index = 0; index < lines.size(); index++) {
+		Line2 &line = lines[index];
 		if (line.get_distance_point_to_seg(app.mouse) < snap_distance) {
 			Vec2 projected_point = line.project_point_to_ray(app.mouse);
 			double p1_distance = get_point_point_distance(app.mouse, line.p1);
@@ -516,49 +557,53 @@ bool Shapes::update_snap(AppState &app) {
 			if (line.check_point_within_seg_bounds(projected_point)) {
 				snap_point = projected_point;
 				snap_shape = SnapShape::LINE;
-				snap_id = line.id;
+				snap_is_id_point = false;
+				snap_index = index;
 				return true;
 			} else if (p1_distance < snap_distance) {
 				snap_point = line.p1;
 				snap_shape = SnapShape::LINE;
-				snap_id = line.id;
+				snap_is_id_point = false;
+				snap_index = index;
 				return true;
 			} else if (p2_distance < snap_distance) {
 				snap_point = line.p2;
 				snap_shape = SnapShape::LINE;
-				snap_id = line.id;
+				snap_is_id_point = false;
+				snap_index = index;
 				return true;
 			}
 		}
 	}
 
-	for (auto &circle : circles) {
+	for (size_t index = 0; index < circles.size(); index++) {
+		Circle2 &circle = circles[index];
 		double distance = get_point_point_distance(circle.center, app.mouse);
 		if (distance < circle.radius() + snap_distance &&
 				distance > circle.radius() - snap_distance) {
 			snap_point = circle.project_point(app.mouse);
 			snap_shape = SnapShape::CIRCLE;
-			snap_id = circle.id;
+			snap_is_id_point = false;
+			snap_index = index;
 			return true;
 		}
 	}
 
-	for (auto &arc: arcs) {
+	for (size_t index = 0; index < arcs.size(); index++) {
+		Arc2 &arc = arcs[index];
 		double distance = get_point_point_distance(arc.center, app.mouse);
 		if (distance < arc.radius() + snap_distance &&
 				distance > arc.radius() - snap_distance) {
 			if (arc.angle_between_arc_points(arc.get_angle_of_point(app.mouse))) {
 			snap_point = arc.project_point(app.mouse);
-			snap_shape = SnapShape::CIRCLE;
-			snap_id = arc.id;
+			snap_shape = SnapShape::ARC;
+			snap_is_id_point = false;
+			snap_index = index;
 			return true;
 			}
 		}
 	}
 
-	// gets executed if not in snap distance
-	snap_id = -1;
-	snap_shape = SnapShape::NONE;
 	return false;
 }
 
@@ -587,6 +632,7 @@ Arc2 *Shapes::get_arc_of_id(const int id) {
 	return nullptr;
 }
 
+// TODO arc, refactor? needed?
 double Shapes::length_last_selected_line() const {
   for (auto const &line : lines) {
     if (line.flags.selected) {
@@ -611,7 +657,7 @@ void Shapes::construct_line(AppState &app, Vec2 const &pt) {
 			pt_set = PtSet::FIRST;
 			in_construction = InConstruction::LINE;
 			temp_line.p1 = pt;
-			temp_line.flags.concealed = app.ctrl_set;
+			temp_line.flags.concealed = construct_concealed;
 		} else if (pt_set == PtSet::FIRST) {
 			pt_set = PtSet::SECOND;
 			if (app.shift_set) {
@@ -626,6 +672,7 @@ void Shapes::construct_line(AppState &app, Vec2 const &pt) {
 			} else {
 				temp_line.p2 = pt;
 			}
+			temp_line.flags.concealed = construct_concealed;
 			temp_line.id = id_counter++;
 			lines.push_back(temp_line);
 			quantity_change = true;
@@ -642,7 +689,7 @@ void Shapes::construct_circle(AppState &app, Vec2 const &pt) {
 			pt_set = PtSet::FIRST;
 			in_construction = InConstruction::CIRCLE;
 			temp_circle.center = pt;
-			temp_circle.flags.concealed = app.ctrl_set;
+			temp_circle.flags.concealed = construct_concealed;
 		} else if (pt_set == PtSet::FIRST) {
 			pt_set = PtSet::SECOND;
 			if (app.shift_set) {
@@ -655,6 +702,7 @@ void Shapes::construct_circle(AppState &app, Vec2 const &pt) {
 			} else {
 				temp_circle.circum_point = pt;
 			}
+			temp_circle.flags.concealed = construct_concealed;
 			temp_circle.id = id_counter++;
 			circles.push_back(temp_circle);
 			quantity_change = true;
@@ -680,7 +728,7 @@ void Shapes::construct_arc(AppState &app, Vec2 const &pt) {
 			pt_set = PtSet::FIRST;
 			in_construction = InConstruction::ARC;
 			temp_arc.center = pt;
-			temp_arc.flags.concealed = app.ctrl_set;
+			temp_arc.flags.concealed = construct_concealed;
 		} else if (pt_set == PtSet::FIRST) {
 			pt_set = PtSet::SECOND;
 			if (app.shift_set) {
@@ -694,52 +742,46 @@ void Shapes::construct_arc(AppState &app, Vec2 const &pt) {
 				temp_arc.circum_point = pt;
 			}
 		} else if (pt_set == PtSet::SECOND) {
-			// if snap to shape, calculate ixn_point and use this
-			if (in_snap_distance && snap_shape != SnapShape::ID_POINT) {
+			// if snap to shape, calculate ixn_point and use this to snap arc
+			if (in_snap_distance && !snap_is_id_point) {
 				if (snap_shape == SnapShape::LINE) {
-					Line2 *snap_line_ptr = get_line_of_id(snap_id);
-					if (snap_line_ptr) {
-						vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(temp_arc, *snap_line_ptr);
-						if (ixn_points.size() > 1) {
-							if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
-									graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
-								temp_arc.end_point = ixn_points.at(0);
-							} else {
-								temp_arc.end_point = ixn_points.at(1);
-							}
+					Line2 &snap_line = lines[snap_index];
+					vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(temp_arc, snap_line);
+					if (ixn_points.size() > 1) {
+						if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
+								graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
+							temp_arc.end_point = ixn_points.at(0);
 						} else {
-							temp_arc.end_point = ixn_points.back();
+							temp_arc.end_point = ixn_points.at(1);
 						}
+					} else {
+						temp_arc.end_point = ixn_points.back();
 					}
 				} else if (snap_shape == SnapShape::CIRCLE) {
-					Circle2 *snap_circle_ptr = get_circle_of_id(snap_id);
-					if (snap_circle_ptr) {
-						vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(temp_arc, *snap_circle_ptr);
-						if (ixn_points.size() > 1) {
-							if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
-									graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
-								temp_arc.end_point = ixn_points.at(0);
-							} else {
-								temp_arc.end_point = ixn_points.at(1);
-							}
+					Circle2 &snap_circle = circles[snap_index];
+					vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(temp_arc, snap_circle);
+					if (ixn_points.size() > 1) {
+						if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
+								graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
+							temp_arc.end_point = ixn_points.at(0);
 						} else {
-							temp_arc.end_point = ixn_points.back();
+							temp_arc.end_point = ixn_points.at(1);
 						}
+					} else {
+						temp_arc.end_point = ixn_points.back();
 					}
 				} else if (snap_shape == SnapShape::ARC) {
-					Arc2 *snap_arc_ptr = get_arc_of_id(snap_id);
-					if (snap_arc_ptr) {
-						vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(temp_arc, *snap_arc_ptr);
-						if (ixn_points.size() > 1) {
-							if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
-									graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
-								temp_arc.end_point = ixn_points.at(0);
-							} else {
-								temp_arc.end_point = ixn_points.at(1);
-							}
+					Arc2 &snap_arc = arcs[snap_index];
+					vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(temp_arc, snap_arc);
+					if (ixn_points.size() > 1) {
+						if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
+								graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
+							temp_arc.end_point = ixn_points.at(0);
 						} else {
-							temp_arc.end_point = ixn_points.back();
+							temp_arc.end_point = ixn_points.at(1);
 						}
+					} else {
+						temp_arc.end_point = ixn_points.back();
 					}
 				}
 			} else {
@@ -748,6 +790,7 @@ void Shapes::construct_arc(AppState &app, Vec2 const &pt) {
 
 			temp_arc.start_angle = temp_arc.get_angle_of_point(temp_arc.circum_point);
 			temp_arc.end_angle = temp_arc.get_angle_of_point(temp_arc.end_point);
+			temp_arc.flags.concealed = construct_concealed;
 			temp_arc.id = id_counter++;
 			arcs.push_back(temp_arc);
 			quantity_change = true;
@@ -784,10 +827,8 @@ void Shapes::construct(AppState &app, Vec2 const &pt) {
   }
 }
 
-// test if point and its id allready in id_points vector 
-// if intersection allready in id_points, not append or add id
 void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &point,
-                           uint32_t shape_id) {
+                           int shape_id, bool pt_concealed) {
   bool point_dup = false;
   for (auto &id_point : id_points) {
 		if (points_equal_with_pixel_epsilon(id_point.p, point)) {
@@ -797,12 +838,20 @@ void id_point_maybe_append(AppState &app, vector<IdPoint> &id_points, Vec2 &poin
 					return;
         }
       }
+			// add id to id point, maybe change conceal status of id point
+			if (id_point.flags.concealed && !pt_concealed) {
+				id_point.flags.concealed = false;
+			}
       id_point.ids.push_back(shape_id);
 			return;
     }
   }
 	if (!point_dup) {
+		// if new point push back and maybe flag as concealed
 		id_points.push_back(IdPoint{point, shape_id});
+		if (pt_concealed) {
+			id_points.back().flags.concealed = true;
+		}
   }
 }
 
@@ -815,12 +864,17 @@ void calculate_id_points(AppState &app, Shapes &shapes) {
 		Line2 &l1 = shapes.lines.at(i);
 		for (int j = i+1; j < shapes.lines.size(); j++) {
 			Line2 &l2 = shapes.lines.at(j);
-			vector<Vec2> ixn_points = Line2_Line2_intersect(l1, l2);
+			vector<Vec2> ixn_points = graphics::Line2_Line2_intersect(l1, l2);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (l1.flags.concealed || l2.flags.concealed) {
+				concealed = true;
+			}
 			for (auto &ixn_point : ixn_points) {
 				id_point_maybe_append(app, shapes.ixn_points,
-															ixn_point, l1.id);
+															ixn_point, l1.id, concealed);
 				id_point_maybe_append(app, shapes.ixn_points,
-															ixn_point, l2.id);
+															ixn_point, l2.id, concealed);
 			}
 		}
 	}
@@ -830,9 +884,14 @@ void calculate_id_points(AppState &app, Shapes &shapes) {
 		for (int j = 0; j < shapes.lines.size(); j++) {
 			Line2 &l = shapes.lines.at(j);
 			vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(l, c);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (c.flags.concealed || l.flags.concealed) {
+				concealed = true;
+			}
 			for (auto &ixn_point : ixn_points) {
-				id_point_maybe_append(app, shapes.ixn_points, ixn_point, l.id);
-				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c.id);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, l.id, concealed);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c.id, concealed);
 			}
 		}
 	}
@@ -841,26 +900,98 @@ void calculate_id_points(AppState &app, Shapes &shapes) {
 		Circle2 &c1 = shapes.circles.at(i);
 		for (int j = i+1; j < shapes.circles.size(); j++) {
 			Circle2 &c2 = shapes.circles.at(j);
-			vector<Vec2> ixn_points = Circle2_Circle2_intersect(c1, c2);
+			vector<Vec2> ixn_points = graphics::Circle2_Circle2_intersect(c1, c2);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (c1.flags.concealed || c2.flags.concealed) {
+				concealed = true;
+			}
 			for (auto &ixn_point : ixn_points) {
-				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c1.id);
-				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c2.id);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c1.id, concealed);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c2.id, concealed);
 			}
 		}
 	}
+
+	// append line-arc intersections
+	for (int i = 0; i < shapes.arcs.size(); i++) {
+		Arc2 &a = shapes.arcs.at(i);
+		for (int j = 0; j < shapes.lines.size(); j++) {
+			Line2 &l = shapes.lines.at(j);
+			vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(a, l);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (a.flags.concealed || l.flags.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, l.id, concealed);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, a.id, concealed);
+			}
+		}
+	}
+
+	// append arc-circle intersections
+	for (int i = 0; i < shapes.arcs.size(); i++) {
+		Arc2 &a = shapes.arcs.at(i);
+		for (int j = i+1; j < shapes.circles.size(); j++) {
+			Circle2 &c = shapes.circles.at(j);
+			vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(a, c);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (a.flags.concealed || c.flags.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, a.id, concealed);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, c.id, concealed);
+			}
+		}
+	}
+
+	// append arc-arc intersections
+	for (int i = 0; i < shapes.arcs.size(); i++) {
+		Arc2 &a1 = shapes.arcs.at(i);
+		for (int j = i+1; j < shapes.circles.size(); j++) {
+			Arc2 &a2 = shapes.arcs.at(j);
+			vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(a1, a2);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (a1.flags.concealed || a2.flags.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, a1.id, concealed);
+				id_point_maybe_append(app, shapes.ixn_points, ixn_point, a2.id, concealed);
+			}
+		}
+	}
+
 	// append shape-defining points
 	for (auto &line : shapes.lines) {
-		id_point_maybe_append(app, shapes.def_points, line.p1, line.id);
-		id_point_maybe_append(app, shapes.def_points, line.p2, line.id);
+		bool concealed = false;
+		if (line.flags.concealed) {
+			concealed = true;
+		}
+		id_point_maybe_append(app, shapes.def_points, line.p1, line.id, concealed);
+		id_point_maybe_append(app, shapes.def_points, line.p2, line.id, concealed);
 	}
 	for (auto &circle : shapes.circles) {
-		id_point_maybe_append(app, shapes.def_points, circle.center, circle.id);
-		id_point_maybe_append(app, shapes.def_points, circle.circum_point, circle.id);
+		bool concealed = false;
+		if (circle.flags.concealed) {
+			concealed = true;
+		}
+		id_point_maybe_append(app, shapes.def_points, circle.center, circle.id, concealed);
+		// id_point_maybe_append(app, shapes.def_points, circle.circum_point, circle.id);
 	}
 	for (auto &arc : shapes.arcs) {
-		id_point_maybe_append(app, shapes.def_points, arc.center, arc.id);
-		id_point_maybe_append(app, shapes.def_points, arc.circum_point, arc.id);
-		id_point_maybe_append(app, shapes.def_points, arc.end_point, arc.id);
+		bool concealed = false;
+		if (arc.flags.concealed) {
+			concealed = true;
+		}
+		id_point_maybe_append(app, shapes.def_points, arc.center, arc.id, concealed);
+		id_point_maybe_append(app, shapes.def_points, arc.circum_point, arc.id, concealed);
+		id_point_maybe_append(app, shapes.def_points, arc.end_point, arc.id, concealed);
 	}
 }
 
@@ -953,34 +1084,105 @@ void gfx(AppState &app, Shapes &shapes) {
 	}
 }
 
+// if in Gen mode and ctrl click on id point -> toogle hl
+void toogle_hl_of_id_points(Shapes &shapes) {
+	assert(shapes.snap_is_id_point);
+	if (shapes.snap_shape == SnapShape::IXN_POINT) {
+		bool &highlighted = shapes.ixn_points[shapes.snap_index].flags.highlighted;
+		if (highlighted) {
+			highlighted = false;
+		} else {
+			highlighted = true;
+		}
+	} else if (shapes.snap_shape == SnapShape::DEF_POINT) {
+		bool &highlighted = shapes.def_points[shapes.snap_index].flags.highlighted;
+		if (highlighted) {
+			highlighted = false;
+		} else {
+			highlighted = true;
+		}
+	}
+}
+
+void hl_id_points_gen_select(Shapes &shapes, int shape_id) {
+	for (auto &ixn_point : shapes.ixn_points) {
+		if (!ixn_point.flags.concealed) {
+			for (auto &id : ixn_point.ids) {
+				if (id == shape_id) {
+					ixn_point.flags.highlighted = true;
+					cout << "point highlighted" << endl;
+					break;
+				}
+			}
+		}
+	}
+
+	for (auto &id_point : shapes.def_points) {
+		if (!id_point.flags.concealed) {
+			for (auto &id : id_point.ids) {
+				if (id == shape_id) {
+					cout << "point highlighted" << endl;
+					id_point.flags.highlighted = true;
+					break;
+				}
+			}
+		}
+	}
+}
+
+// TODO implement arc gen select
 void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
-  if (shapes.snap_shape == SnapShape::ID_POINT) {
-    if (!gen_shapes.start_set) {
-      gen_shapes.start_point = shapes.snap_point;
-      gen_shapes.start_set = true;
-			cout << "id point set" << endl;
-    } else {
-      gen_shapes.start_set = false;
-			cout << "id point unset" << endl;
-    }
-		//TODO: check that i stay in the same shape id
-  } else if (shapes.snap_shape != SnapShape::ID_POINT && gen_shapes.start_set) {
-    for (auto iter = shapes.lines.begin(); iter != shapes.lines.end(); iter++) {
-      if (iter->id == shapes.snap_id) {
-        gen_shapes.lines.push_back(
-            GenLine{*iter, gen_shapes.start_point, shapes.snap_point});
-        gen_shapes.start_set = false;
-				cout << "gen_shape added" << endl;
-      }
-    }
-    for (auto iter = shapes.circles.begin(); iter != shapes.circles.end(); iter++) {
-      if (iter->id == shapes.snap_id) {
-        gen_shapes.circles.push_back(
-            GenCircle{*iter, gen_shapes.start_point, shapes.snap_point});
-        gen_shapes.start_set = false;
-				cout << "gen_shape added" << endl;
-      }
-    }
+  if (shapes.snap_is_id_point) {
+		if (shapes.snap_shape == SnapShape::IXN_POINT) {
+				shapes.gen_start_point_ids = shapes.ixn_points[shapes.snap_index].ids;
+		} else if (shapes.snap_shape == SnapShape::DEF_POINT) {
+				shapes.gen_start_point_ids = shapes.def_points[shapes.snap_index].ids;
+		}
+		shapes.gen_start_point = shapes.snap_point;
+		shapes.gen_start_set = true;
+  } else if (!shapes.snap_is_id_point && shapes.gen_start_set) {
+
+		if (shapes.snap_shape == SnapShape::LINE) {
+			Line2 line = shapes.lines[shapes.snap_index];
+			for (auto &id : shapes.gen_start_point_ids) {
+				if (line.id == id) {
+					line.flags.highlighted = true;
+					gen_shapes.lines.push_back(
+						GenLine{line, shapes.gen_start_point, shapes.snap_point});
+					hl_id_points_gen_select(shapes, line.id);
+					gen_shapes.start_set = false;
+					break;
+				}
+			}
+		}
+
+		if (shapes.snap_shape == SnapShape::CIRCLE) {
+			Circle2 circle = shapes.circles[shapes.snap_index];
+			for (auto & id : shapes.gen_start_point_ids) {
+				if (circle.id == id) {
+					circle.flags.highlighted = true;
+					gen_shapes.circles.push_back(
+						GenCircle{circle, shapes.gen_start_point, shapes.snap_point});
+					hl_id_points_gen_select(shapes, circle.id);
+					gen_shapes.start_set = false;
+					break;
+				}
+			}
+		}
+
+		if (shapes.snap_shape == SnapShape::ARC) {
+			Arc2 arc = shapes.arcs[shapes.snap_index];
+			for (auto & id : shapes.gen_start_point_ids) {
+				if (arc.id == id) {
+					arc.flags.highlighted = true;
+					gen_shapes.arcs.push_back(
+						GenArc{arc, shapes.gen_start_point, shapes.snap_point});
+					hl_id_points_gen_select(shapes, arc.id);
+					gen_shapes.start_set = false;
+					break;
+				}
+			}
+		}
   }
 }
 
@@ -997,44 +1199,45 @@ uint32_t get_color(const ShapeFlags &flags) {
 	}
 }
 
-// TODO: depreciated?
-int get_quad_of_point_on_circle(Vec2 &center, Vec2 &point) {
-	if (point.x >= center.x && point.y <= center.y) {
-		return 0;
-	} else if (point.x < center.x && point.y <= center.y) {
-		return 1;
-	} else if (point.x <= center.x && point.y > center.y) {
-		return 2;
-	} else if (point.x > center.x && point.y > center.y) {
-		return 3;
-	} else {
-		exit(EXIT_FAILURE);
-	}
-}
-
 // TODO: endpoint mix with intersection points, leads to problems
 vector<double> gen_line_relations(AppState &app, Shapes &shapes,
-                                          GenLine &line) {
+                                          GenLine &gen) {
 	vector<double> distances {};
 	vector<double> distance_relations {};
 
-	Vec2 A = line.start_point;
-	Vec2 B = (A.x == line.line.p1.x && A.y == line.line.p1.y)
-		? B = line.line.p2
-		: B = line.line.p1;
-	cout << "line: " << line.line.p1.x << "," << line.line.p1.y << line.line.p2.x << "," << line.line.p2.y << endl;
+	Vec2 A = gen.start_point;
+	Vec2 B {};
+	if (A.x == gen.line.p1.x && A.y == gen.line.p1.y) {
+		B = gen.line.p2;
+	} else {
+		B = gen.line.p1;
+	}
 
 	double max_distance = (get_point_point_distance(A, B));
 
-	for (auto &id_point : shapes.ixn_points) {
-		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
-										[&](const auto &id) { return id == line.line.id; })) {
-			distances.push_back(get_point_point_distance(A, id_point.p));
+	std::cout << "max distance: " << max_distance << endl;
+	std::cout << "start point: " << A.x << "," << A.y << endl;
+	std::cout << "end point: " << B.x << "," << B.y << endl;
+	std::cout << "p1 point: " << gen.line.p1.x << "," << gen.line.p1.y << endl;
+	std::cout << "p2 point: " << gen.line.p2.x << "," << gen.line.p2.y << endl;
+	std::cout << "dir point: " << gen.dir_point.x << "," << gen.dir_point .y << endl;
+
+	for (auto &ixn_point : shapes.ixn_points) {
+		if (ixn_point.flags.highlighted && std::any_of(ixn_point.ids.begin(), ixn_point.ids.end(),
+										[&](const auto &id) { return id == gen.line.id; })) {
+			distances.push_back(get_point_point_distance(A, ixn_point.p));
 		}
 	}
 
+	cout << "distances: ";
+	for (double distance : distances) {
+			std::cout << distance << " ";
+	}
+	std::cout << std::endl;
+
+	// push back start and end distance if not allready in 
 	auto iter = find_if(distances.begin(), distances.end(), 
-			[](double d){ return fabs(d - 0.0) < gk::epsilon; });
+			[](double distance){ return fabs(distance - 0.0) < gk::epsilon; });
 	if (iter == distances.end()) {
 		distances.push_back(0.0);
 	}
@@ -1044,74 +1247,120 @@ vector<double> gen_line_relations(AppState &app, Shapes &shapes,
 		distances.erase(iter);
 	}
 
+	// sort ascending
 	sort(distances.begin(), distances.end(), [](double v1, double v2){ return v1 < v2; });
 
-	cout << "distances: " << endl;
-	for (auto &distance : distances) {
-		cout << distance << ", ";
-	}
-	cout << "max distance: " << max_distance << endl;
-	cout << endl;
+	// normalize
 	for (auto &distance : distances) {
 		distance /= max_distance;
 	}
-	// for (int i = 0; i < distances.size() - 1; i++) {
-	// 	// distance_relations.push_back(1 / ((distances.at(i+1) - distances.at(i)) / max_distance)); // 1/val for phasor
-	// 	distance_relations.push_back((distances.at(i+1) - distances.at(i)) / max_distance);
-	// }
 	return distances;
-}
-
-double get_angle_circum_point(Circle2 &circle, Vec2 &point) {
-  Vec2 base_point{circle.center.x + circle.radius(), circle.center.y};
-  double secant_distance = get_point_point_distance(base_point, point);
-  double angle = std::acos(
-      (2 * SDL_pow(circle.radius(), 2.0) - SDL_pow(secant_distance, 2.0)) /
-      (2 * SDL_pow(circle.radius(), 2.0)));
-
-  if (point.y < circle.center.y) {
-		return angle;
-  } else if (point.y > circle.center.y) {
-    return 2 * numbers::pi - angle;
-  } else if (point.y == circle.center.y) {
-    if (point.x >= circle.center.x) {
-      return 0.0;
-    } else {
-      return numbers::pi;
-    }
-  }
 }
 
 // TODO: function should take some point on the circle as arg
 vector<double> gen_circle_relations(AppState &app, Shapes &shapes,
-                                          GenCircle &circle) {
+                                          GenCircle &gen) {
 	bool direction_clockwise = false;
-	vector<Vec2> points;
 	vector<double> angles {};
 	vector<double> angle_relations {};
 
 	// fill all points into vector, if a point is selected put in front
-	for (auto &id_point : shapes.ixn_points) {
-		if (std::any_of(id_point.ids.begin(), id_point.ids.end(),
-										[&](const auto &id) { return id == circle.circle.id; })) {
-			points.push_back(id_point.p);
+	for (auto &ixn_point : shapes.ixn_points) {
+		if (ixn_point.flags.highlighted && std::any_of(ixn_point.ids.begin(), ixn_point.ids.end(),
+										[&](const auto &id) { return id == gen.circle.id; })) {
+			angles.push_back(gen.circle.get_angle_of_point(ixn_point.p));
 		}
 	}
 
-	for (auto &point : points) {
-		angles.push_back(get_angle_circum_point(circle.circle, point));
+	// determine direction
+	double start_angle = gen.circle.get_angle_of_point(gen.start_point);
+	double dir_angle = gen.circle.get_angle_of_point(gen.dir_point);
+	double start_angle_opposite {};
+	if (start_angle > numbers::pi) {
+		start_angle_opposite = start_angle - numbers::pi;
+		if (dir_angle >= start_angle || dir_angle < start_angle_opposite) {
+			// counter clockwise
+			direction_clockwise = false;
+			sort(angles.begin(), angles.end(),
+				[](double a1, double a2) { return a1 < a2; });
+		} else {
+			// clockwise
+			direction_clockwise = true;
+			sort(angles.begin(), angles.end(),
+				[](double a1, double a2) { return a1 > a2; });
+		}
+	} else {
+		start_angle_opposite = start_angle + numbers::pi;
+		if (dir_angle >= start_angle && dir_angle < start_angle_opposite) {
+			// counter clockwise
+			direction_clockwise = false;
+			sort(angles.begin(), angles.end(),
+				[](double a1, double a2) { return a1 < a2; });
+		} else {
+			// clockwise
+			direction_clockwise = true;
+			sort(angles.begin(), angles.end(),
+				[](double a1, double a2) { return a1 > a2; });
+		}
 	}
 
 	// Print the rotated vector
-	std::cout << "Unsorted vector: ";
+	std::cout << "Sorted vector: ";
 	for (double angle : angles) {
 			std::cout << angle << " ";
 	}
 	std::cout << std::endl;
 
+	auto iter = find(angles.begin(), angles.end(), start_angle);
+	rotate(angles.begin(), iter, angles.end());
+
+	// Print the rotated vector
+	std::cout << "Rotated vector: ";
+	for (double angle : angles) {
+			std::cout << angle << " ";
+	}
+	std::cout << std::endl;
+
+	vector<double> final_angles {};
+	double final_angle {};
+
+	for (auto &angle : angles) {
+		if (direction_clockwise) {
+			if (angle <= angles.at(0)) {
+				final_angle = angles.at(0) - angle;
+			} else {
+				final_angle = (2 * numbers::pi - angle) + angles.at(0);
+			}
+		} else {
+			if (angle >= angles.at(0)) {
+				final_angle = angle - angles.at(0);
+			} else {
+				final_angle = (2 * numbers::pi + angle) - angles.at(0);
+			}
+		}
+		final_angle /= (2 * numbers::pi);
+		final_angles.push_back(final_angle);
+	}
+	return final_angles;
+}
+
+vector<double> gen_arc_relations(AppState &app, Shapes &shapes,
+                                          GenArc &gen) {
+	bool direction_clockwise = false;
+	vector<double> angles {};
+	vector<double> angle_relations {};
+
+	// fill all points into vector, if a point is selected put in front
+	for (auto &ixn_point : shapes.ixn_points) {
+		if (ixn_point.flags.highlighted && std::any_of(ixn_point.ids.begin(), ixn_point.ids.end(),
+										[&](const auto &id) { return id == gen.arc.id; })) {
+			angles.push_back(gen.arc.get_angle_of_point(ixn_point.p));
+		}
+	}
+
 	// determine direction
-	double start_angle = get_angle_circum_point(circle.circle, circle.start_point);
-	double dir_angle = get_angle_circum_point(circle.circle, circle.dir_point);
+	double start_angle = gen.arc.get_angle_of_point(gen.start_point);
+	double dir_angle = gen.arc.get_angle_of_point(gen.dir_point);
 	double start_angle_opposite {};
 	if (start_angle > numbers::pi) {
 		start_angle_opposite = start_angle - numbers::pi;
@@ -1330,10 +1579,8 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 
 		// [draw circle around all intersetion points]
 		for (const auto &is_point : shapes.ixn_points) {
-			if (is_point.flags.selected) {
-				Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
-				draw_circle(app, pixels_locked, Circle2 {is_point.p, rad_point}, get_color(is_point.flags));
-			}
+			Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
+			draw_circle(app, pixels_locked, Circle2 {is_point.p, rad_point}, get_color(is_point.flags));
 		}
 		// [draw circle around all shape points]
 		for (const auto &shape_point : shapes.def_points) {
@@ -1348,16 +1595,16 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 		}
 
 		// draw geo_selected shapes and points in specific color
-		for (auto &gen_line : gen_shapes.lines) {
-			Vec2 rad_point = { gen_line.start_point.x + 20, gen_line.start_point.y };
-			draw_circle(app, pixels_locked, Circle2 {gen_line.start_point, rad_point}, graphics::gen_color); 
-			draw_line(app, pixels_locked, gen_line.line, graphics::gen_color);
-		}
-		for (auto &gen_circle : gen_shapes.circles) {
-			Vec2 rad_point = { gen_circle.start_point.x + 20, gen_circle.start_point.y };
-			draw_circle(app, pixels_locked, Circle2 {gen_circle.start_point, rad_point}, graphics::gen_color); 
-			draw_circle(app, pixels_locked, gen_circle.circle, graphics::gen_color); 
-		}
+		// for (auto &gen_line : gen_shapes.lines) {
+		// 	Vec2 rad_point = { gen_line.start_point.x + 20, gen_line.start_point.y };
+		// 	draw_circle(app, pixels_locked, Circle2 {gen_line.start_point, rad_point}, graphics::gen_color); 
+		// 	draw_line(app, pixels_locked, gen_line.line, graphics::gen_color);
+		// }
+		// for (auto &gen_circle : gen_shapes.circles) {
+		// 	Vec2 rad_point = { gen_circle.start_point.x + 20, gen_circle.start_point.y };
+		// 	draw_circle(app, pixels_locked, Circle2 {gen_circle.start_point, rad_point}, graphics::gen_color); 
+		// 	draw_circle(app, pixels_locked, gen_circle.circle, graphics::gen_color); 
+		// }
 
 
 		// draw edit line

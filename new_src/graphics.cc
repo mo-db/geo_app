@@ -183,18 +183,23 @@ std::vector<Vec2> Circle2_Circle2_intersect(const Circle2 &c1,
 }
 std::vector<Vec2> Arc2_Line2_intersect(const Arc2 &a, const Line2 &l) {
 	vector<Vec2> ixn_points = Line2_Circle2_intersect(l, a);
-	for (auto iter = ixn_points.begin(); iter != ixn_points.end(); iter++) {
+	for (auto iter = ixn_points.begin(); iter != ixn_points.end();) {
+		// careful with iterator erase and incrementing
 		if (!a.angle_between_arc_points(a.get_angle_of_point(*iter))) {
-			ixn_points.erase(iter);
+			iter = ixn_points.erase(iter);
+		} else {
+			iter++;
 		}
 	}
 	return ixn_points;
 }
 std::vector<Vec2> Arc2_Circle2_intersect(const Arc2 &a, const Circle2 &c) {
 	vector<Vec2> ixn_points = Circle2_Circle2_intersect(c, static_cast<Circle2>(a));
-	for (auto iter = ixn_points.begin(); iter != ixn_points.end(); iter++) {
+	for (auto iter = ixn_points.begin(); iter != ixn_points.end();) {
 		if (!a.angle_between_arc_points(a.get_angle_of_point(*iter))) {
-			ixn_points.erase(iter);
+			iter = ixn_points.erase(iter);
+		} else {
+			iter++;
 		}
 	}
 	return ixn_points;
@@ -203,12 +208,11 @@ std::vector<Vec2> Arc2_Arc2_intersect(const Arc2 &a1,	const Arc2 &a2) {
 	vector<Vec2> ixn_points =
 		Circle2_Circle2_intersect(static_cast<Circle2>(a1),
 															static_cast<Circle2>(a2));
-	for (auto iter = ixn_points.begin(); iter != ixn_points.end(); iter++) {
+	for (auto iter = ixn_points.begin(); iter != ixn_points.end();) {
 		if (!a1.angle_between_arc_points(a1.get_angle_of_point(*iter))) {
-			ixn_points.erase(iter);
-		}
-		if (!a2.angle_between_arc_points(a2.get_angle_of_point(*iter))) {
-			ixn_points.erase(iter);
+			iter = ixn_points.erase(iter);
+		} else {
+			iter++;
 		}
 	}
 	return ixn_points;

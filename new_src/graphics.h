@@ -4,7 +4,7 @@
 namespace graphics {
 	constexpr uint32_t fg_color = 0x00000000;					//black
 	constexpr uint32_t bg_color = 0x00FFFFFF;					//white
-	constexpr uint32_t hl_color = 0x000000FF;					//blue
+	constexpr uint32_t hl_color = 0x00FF0000;					//red
 	constexpr uint32_t sel_color = 0x00FF0000;				//red
 	constexpr uint32_t conceal_color = 0x00CCCCCC;		//grey
 	constexpr uint32_t gen_color = 0x000000FF;				//blue
@@ -31,17 +31,17 @@ namespace graphics {
 	// IdPoint implementation
 	struct IdPoint {
 		Vec2 p;
-		std::vector<uint32_t> ids;
+		std::vector<int> ids;
 		ShapeFlags flags;
 		IdPoint() = default;
-		IdPoint(Vec2 &p, uint32_t id) : p{p}, ids{id} {}
+		IdPoint(Vec2 &p, int id) : p{p}, ids{id} {}
 	};
 
 	// Line2 implementation
 	struct Line2 {
 		Vec2 p1 {};
 		Vec2 p2 {};
-		uint32_t id {};
+		int id {};
 		ShapeFlags flags;
 		Line2() = default;
 		Line2(Vec2 p1) : p1 {p1} {}
@@ -58,7 +58,7 @@ namespace graphics {
 	struct Circle2 {
 		Vec2 center {};
 		Vec2 circum_point {};
-		uint32_t id {};
+		int id {};
 		ShapeFlags flags;
 		Circle2() = default;
 		Circle2(Vec2 center) : center {center} {}
@@ -97,4 +97,4 @@ namespace graphics {
 	std::vector<Vec2> Arc2_Circle2_intersect(const Arc2 &a, const Circle2 &c);
 	std::vector<Vec2> Arc2_Arc2_intersect(const Arc2 &a1,
 																							const Arc2 &a2);
-}
+} // namespace graphics
