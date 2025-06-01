@@ -5,7 +5,7 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES := main graphics
+SRC_NAMES := main graphics save_sys
 SRC_DIR := new_src
 OBJ_DIR := obj
 BIN_DIR := bin

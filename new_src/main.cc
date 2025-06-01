@@ -1,5 +1,6 @@
 #include "core.h"
 #include "graphics.h"
+#include "save_sys.h"
 
 #define DEBUG_MODE
 
@@ -364,6 +365,13 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 				case SDLK_LCTRL:
 					if (!event.key.repeat) {
 						app.ctrl_set = true;
+					}
+					break;
+				case SDLK_W:
+					if (!event.key.repeat) {
+						olc::utils::DataFile df;
+						df.set_real(3.14);
+						std::cout << df.get_string() << std::endl;
 					}
 					break;
         case SDLK_ESCAPE:
