@@ -41,8 +41,8 @@ namespace graphics {
 	struct Line2 {
 		Vec2 p1 {};
 		Vec2 p2 {};
-		int id {};
 		ShapeFlags flags;
+		int id {};
 		Line2() = default;
 		Line2(Vec2 p1) : p1 {p1} {}
 		Line2(Vec2 p1, Vec2 p2) : p1 {p1}, p2 {p2} {}

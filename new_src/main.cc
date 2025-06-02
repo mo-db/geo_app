@@ -131,12 +131,10 @@ struct Shapes {
 
 	void pop_selected(AppState &app);
 	void pop_by_id(int id);
-	// void id_redist(); // if id_counter >= uint16_t max redist id's, not needed
+	void load_state_from_disk(); // -> void clear_shapes(); -> reset id_counter
 
 	vector<IdPoint> ixn_points;
 	vector<IdPoint> def_points;
-	// on object count change, recalculate snap points
-	// -> recalculate all is_points and append, take all vertex points and append
 };
 
 struct GenLine {
@@ -195,6 +193,9 @@ bool maybe_set_snap_point(AppState &app, Shapes &shapes);
 void check_for_changes(AppState &app, Shapes &shapes);
 
 void toogle_hl_of_id_points(Shapes &shapes);
+
+void save_appstate(const Shapes &shapes, const std::string &save_file);
+void load_appstate(Shapes &shapes, const std::string &save_file);
 
 int main() {
 	AppState app;
@@ -367,13 +368,6 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 						app.ctrl_set = true;
 					}
 					break;
-				case SDLK_W:
-					if (!event.key.repeat) {
-						olc::utils::DataFile df;
-						df.set_real(3.14);
-						std::cout << df.get_string() << std::endl;
-					}
-					break;
         case SDLK_ESCAPE:
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
@@ -452,6 +446,18 @@ void process_events(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
             app.mode = AppMode::EDIT;
+          }
+          break;
+				case SDLK_R:
+          if (!event.key.repeat) {
+						std::string save_file = "save_file";
+						save_appstate(shapes, save_file);
+          }
+          break;
+				case SDLK_T:
+          if (!event.key.repeat) {
+						std::string save_file = "save_file";
+						load_appstate(shapes, save_file);
           }
           break;
 				case SDLK_BACKSPACE:
@@ -1646,6 +1652,107 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	// std::cout << "dt_out: " << dt_ms << std::endl;
 	SDL_RenderPresent(app.renderer);
 }
+
+void serialize_line(const graphics::Line2 &line, ofstream &out) {
+	out << line.p1.x << " " << line.p1.y << " " 
+			<< line.p2.x << " " << line.p2.y << " "
+			<< static_cast<int>(line.flags.concealed) << " ";
+}
+graphics::Line2 deserialize_line(ifstream &in) {
+	Line2 line;
+	int concealed_int {};
+	in >> line.p1.x >> line.p1.y >> line.p2.x >> line.p2.y
+		 >> concealed_int;
+	line.flags.concealed = static_cast<bool>(concealed_int);
+	return line;
+}
+
+void serialize_circle(const graphics::Circle2 &circle, ofstream &out) {
+	out << circle.center.x << " " << circle.center.y << " "
+			<< circle.circum_point.x << " " << circle.circum_point.y << " "
+			<< static_cast<int>(circle.flags.concealed) << " ";
+}
+Circle2 deserialize_circle(ifstream &in) {
+	Circle2 circle;
+	int concealed_int {};
+	in >> circle.center.x >> circle.center.y
+		 >> circle.circum_point.x >> circle.circum_point.y >> concealed_int;
+	circle.flags.concealed = static_cast<bool>(concealed_int);
+	return circle;
+}
+
+void serialize_arc(const graphics::Arc2 &arc, ofstream &out) {
+	out << arc.center.x << " " << arc.center.y << " "
+			<< arc.circum_point.x << " " << arc.circum_point.y << " "
+			<< arc.end_point.x << " " << arc.end_point.y << " "
+			<< static_cast<int>(arc.flags.concealed) << " ";
+}
+Arc2 deserialize_arc(ifstream &in) {
+	Arc2 arc;
+	int concealed_int {};
+	in >> arc.center.x >> arc.center.y
+		 >> arc.circum_point.x >> arc.circum_point.y
+		 >> arc.end_point.x >> arc.end_point.y >> concealed_int;
+	arc.flags.concealed = static_cast<bool>(concealed_int);
+	arc.start_angle = arc.get_angle_of_point(arc.circum_point);
+	arc.end_angle = arc.get_angle_of_point(arc.end_point);
+	return arc;
+}
+
+// serialize all shape vectors using key member variables
+// each vector is saved as a line with the amout at first position
+void save_appstate(const Shapes &shapes, const std::string &save_file) {
+	std::ofstream out(save_file);
+	assert(out);
+
+	out << shapes.lines.size() << " ";
+	for (auto &line : shapes.lines) {
+		serialize_line(line, out);
+	}
+	out << endl;
+
+	out << shapes.circles.size() << " ";
+	for (auto &circle : shapes.circles) {
+		serialize_circle(circle, out);
+	}
+	out << endl;
+
+	out << shapes.arcs.size() << " ";
+	for (auto &arc : shapes.arcs) {
+		serialize_arc(arc, out);
+	}
+	out << endl;
+}
+
+// clear shapes and load saved ones
+// the amout of shapes to load per line is determined by the start value
+void load_appstate(Shapes &shapes, const std::string &save_file) {
+	std::ifstream in(save_file);
+	assert(in);
+	shapes.quantity_change = true;
+
+	shapes.lines.clear();
+	size_t n_lines;
+	in >> n_lines;
+	for (size_t i = 0; i < n_lines; i++) {
+	 shapes.lines.push_back(deserialize_line(in));
+	}
+
+	shapes.circles.clear();
+	size_t n_circles;
+	in >> n_circles;
+	for (size_t i = 0; i < n_circles; i++) {
+		shapes.circles.push_back(deserialize_circle(in));
+	}
+
+	shapes.arcs.clear();
+	size_t n_arcs;
+	in >> n_arcs;
+	for (size_t i = 0; i < n_arcs; i++) {
+		shapes.arcs.push_back(deserialize_arc(in));
+	}
+}
+
 
 void check_for_changes(AppState &app, Shapes &shapes) {
 	if (shapes.quantity_change) {

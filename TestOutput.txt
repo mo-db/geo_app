@@ -1,0 +1,9 @@
+
+some_node
+{
+	name = Moritz
+	age = 24
+	height = 1.780000
+	code = c++, c++
+}
+

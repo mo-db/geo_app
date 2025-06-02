@@ -5,7 +5,7 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES := main graphics save_sys
+SRC_NAMES := main graphics
 SRC_DIR := new_src
 OBJ_DIR := obj
 BIN_DIR := bin
@@ -32,7 +32,7 @@ BASE_FLAGS := -std=c++23 -I$(SRC_DIR)
 # Warning and Debug flags, debug flags need to be included when linking
 MODE ?= debug
 ifeq ($(MODE), debug)
-	DEBUG_FLAGS := -g -fsanitize=address,undefined
+	DEBUG_FLAGS := -g -O0 -fsanitize=address,undefined
 	WARNING_FLAGS := -Wall -Wextra -pedantic
 else ifeq ($(MODE), thread)
 	DEBUG_FLAGS := -g -fsanitize=thread

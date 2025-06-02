@@ -5,7 +5,7 @@ void DataFile::set_string(const std::string &s_string, const size_t n_item) {
 	if (n_item >= m_vContent.size()) { // NOTE why even resize the vector?
 		m_vContent.resize(n_item + 1);
 	}
-	m_vContent[n_item] = s_string; // NOTE why not push back the string??
+	m_vContent[n_item] = s_string; // NOTE why doesn't push back the string??
 }
 const std::string DataFile::get_string(const size_t n_item) const {
 	if (n_item >= m_vContent.size()) { // why even resize the vector?
