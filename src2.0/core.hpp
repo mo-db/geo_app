@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cassert>
 #include <numbers>
+#include <chrono>
 #include <vector>
 #include <SDL3/SDL.h>
 

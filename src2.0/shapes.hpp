@@ -8,6 +8,7 @@ struct Shape {
 	int id{-1};
 	bool selected{false};
 	bool concealed{false};
+	bool highlighted{false};
 	Shape() = default;
 	Shape(const int id) : id{id} {}
 };
@@ -76,15 +77,15 @@ struct Ref {
 
 enum struct SnapShape { NONE, IXN_POINT, DEF_POINT, LINE, CIRCLE, ARC, };
 struct Snap {
-	const double snap_distance = 20.0; // why cant i do constexpr?
-	bool snap_to_id_pts = true;
+	const double distance = 20.0; // why cant i do constexpr?
+	bool enabled_for_node_shapes = true;
 
-	Vec2 snap_point;
-	int snap_id {-1};
-	int snap_index {};
-	bool snap_is_id_point;
-	SnapShape snap_shape = SnapShape::NONE;
-	bool in_snap_distance = false;
+	Vec2 point;
+	int id {-1};
+	int index {};
+	bool is_node_shape = false;
+	bool in_distance = false;
+	SnapShape shape = SnapShape::NONE;
 };
 
 struct Shapes {
@@ -116,9 +117,9 @@ void pop_by_id(int id);
 
 // constructing shapes
 namespace detail {
-void construct_line(App &app, const Vec2 &pt);
-void construct_circle(App &app, const Vec2 &pt);
-void construct_arc(App &app, const Vec2 &pt);
+void construct_line(const App &app, Shapes &shapes, const Vec2 &pt);
+void construct_circle(const App &app, Shapes &shapes, const Vec2 &pt);
+void construct_arc(const App &app, Shapes &shapes, const Vec2 &pt);
 } // namespace detail
 void construct(App &, const Vec2 &point);
 

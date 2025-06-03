@@ -27,7 +27,7 @@ ArcShape *Shapes::get_arc_by_id(const int id) {
 
 namespace shapes {
 
-void construct_line(App &app, Shapes &shapes, const Vec2 &P) {
+void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 	auto &line_shape = shapes.construct.line_shape;
 	auto &construct = shapes.construct;
 
@@ -66,7 +66,17 @@ void construct_line(App &app, Shapes &shapes, const Vec2 &P) {
 	}
 }
 
-void construct_circle(App &app, Shapes &shapes, const Vec2 &P) {
+void set_P(Shapes &shapes, Circle2 &circle, const Vec2 &P) {
+		if (shapes.ref.shape == RefShape::CIRCLE) {
+			double ref_radius = shapes.ref.value;
+			assert(ref_radius >= 0);
+			circle2::set_exact_P(circle, ref_radius, P);
+		} else {
+			circle.P = P;
+		}
+}
+
+void construct_circle(const App &app, Shapes &shapes, const Vec2 &P) {
 	auto &circle_shape = shapes.construct.circle_shape;
 	auto &construct = shapes.construct;
 
@@ -78,13 +88,8 @@ void construct_circle(App &app, Shapes &shapes, const Vec2 &P) {
 			circle_shape.concealed = construct.concealed;
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
-			if (shapes.ref.shape == RefShape::CIRCLE) {
-				double ref_radius = shapes.ref.value;
-				assert(ref_radius >= 0);
-				circle2::set_exact_P(circle_shape.circle, ref_radius, P);
-			} else {
-				circle_shape.circle.P = P;
-			}
+			set_P(shapes, circle_shape.circle, P);
+
 			circle_shape.concealed = construct.concealed;
 			circle_shape.id = shapes.id_counter++;
 			shapes.circles.push_back(circle_shape);
@@ -92,118 +97,93 @@ void construct_circle(App &app, Shapes &shapes, const Vec2 &P) {
 			construct.clear();
 		}
 	} else if (shapes.construct.point_set == PointSet::FIRST) {
-		if (shapes.ref.shape == RefShape::CIRCLE) {
-			double ref_radius = shapes.ref.value;
-			assert(ref_radius >= 0);
-			circle2::set_exact_P(circle_shape.circle, ref_radius, P);
-		} else {
-			circle_shape.circle.P = P;
-		}
+		set_P(shapes, circle_shape.circle, P);
 	}
 }
 
-void construct_arc(AppState &app, Vec2 const &pt) {
-	if (app.mouse_click) {
-		if (shapes.construct.point_set == PointSet::NONE) {
-			shapes.construct.point_set = PointSet::FIRST;
-			in_construction = InConstruction::ARC;
-			temp_arc.center = pt;
-			temp_arc.flags.concealed = construct_concealed;
-		} else if (shapes.construct.point_set == PointSet::FIRST) {
-			shapes.construct.point_set = PointSet::SECOND;
-			if (app.shift_set) {
-				double last_radius = radius_last_selected_circle();
-				if (last_radius >= 0.) {
-					temp_arc.set_exact_circum_point(last_radius, pt);
-				} else {
-					temp_arc.circum_point = pt;
-				}
-			} else {
-				temp_arc.circum_point = pt;
-			}
-		} else if (shapes.construct.point_set == PointSet::SECOND) {
-			// if snap to shape, calculate ixn_point and use this to snap arc
-			if (in_snap_distance && !snap_is_id_point) {
-				if (snap_shape == SnapShape::LINE) {
-					Line2 &snap_line = lines[snap_index];
-					vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(temp_arc, snap_line);
-					if (ixn_points.size() > 1) {
-						if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
-								graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
-							temp_arc.end_point = ixn_points.at(0);
-						} else {
-							temp_arc.end_point = ixn_points.at(1);
-						}
-					} else {
-						temp_arc.end_point = ixn_points.back();
-					}
-				} else if (snap_shape == SnapShape::CIRCLE) {
-					Circle2 &snap_circle = circles[snap_index];
-					vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(temp_arc, snap_circle);
-					if (ixn_points.size() > 1) {
-						if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
-								graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
-							temp_arc.end_point = ixn_points.at(0);
-						} else {
-							temp_arc.end_point = ixn_points.at(1);
-						}
-					} else {
-						temp_arc.end_point = ixn_points.back();
-					}
-				} else if (snap_shape == SnapShape::ARC) {
-					Arc2 &snap_arc = arcs[snap_index];
-					vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(temp_arc, snap_arc);
-					if (ixn_points.size() > 1) {
-						if (graphics::get_point_point_distance(ixn_points.at(0), app.mouse) < 
-								graphics::get_point_point_distance(ixn_points.at(1), app.mouse)) {
-							temp_arc.end_point = ixn_points.at(0);
-						} else {
-							temp_arc.end_point = ixn_points.at(1);
-						}
-					} else {
-						temp_arc.end_point = ixn_points.back();
-					}
-				}
-			} else {
-				temp_arc.end_point = temp_arc.project_point(pt);
-			}
+// arc
+void set_snap_E(std::vector<Vec2> ixn_points, const App &app, ArcShape &arc_shape) {
+	if (ixn_points.size() > 1) {
+		if (vec2::distance(ixn_points.at(0), app.input.mouse) < 
+				vec2::distance(ixn_points.at(1), app.input.mouse)) {
+			arc_shape.arc.E = ixn_points.at(0);
+		} else {
+			arc_shape.arc.E = ixn_points.at(1);
+		}
+	} else {
+		arc_shape.arc.E = ixn_points.back();
+	} 
+}
 
-			temp_arc.start_angle = temp_arc.get_angle_of_point(temp_arc.circum_point);
-			temp_arc.end_angle = temp_arc.get_angle_of_point(temp_arc.end_point);
-			temp_arc.flags.concealed = construct_concealed;
-			temp_arc.id = id_counter++;
-			arcs.push_back(temp_arc);
-			quantity_change = true;
-			clear_construction();
+void set_E(const App &app, Shapes &shapes, ArcShape &arc_shape, const Vec2 &P) {
+	if (shapes.snap.in_distance && shapes.snap.is_node_shape) {
+		if (shapes.snap.shape == SnapShape::LINE) {
+			LineShape &line_shape = shapes.lines[shapes.snap.index];
+			std::vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(arc_shape.arc, line_shape.line);
+			set_snap_E(ixn_points, app, arc_shape);
+		} else if (shapes.snap.shape == SnapShape::CIRCLE) {
+			CircleShape &circle_shape = shapes.circles[shapes.snap.index];
+			std::vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(arc_shape.arc, circle_shape.circle);
+			set_snap_E(ixn_points, app, arc_shape);
+		} else if (shapes.snap.shape == SnapShape::ARC) {
+			ArcShape &arc_shape_2 = shapes.arcs[shapes.snap.index];
+			std::vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(arc_shape.arc, arc_shape_2.arc);
+			set_snap_E(ixn_points, app, arc_shape);
+		}
+	} else {
+		arc_shape.arc.E = circle2::project_point(arc_shape.arc.to_circle(), P);
+	}
+	arc_shape.arc.E_angle =
+		circle2::get_angle_of_point(arc_shape.arc.to_circle(), arc_shape.arc.E);
+}
+
+void set_S(Shapes &shapes, ArcShape &arc_shape, const Vec2 &P) {
+	if (shapes.ref.shape == RefShape::ARC) {
+		double ref_radius = shapes.ref.value;
+		assert(ref_radius >= 0);
+		arc2::set_S(arc_shape.arc, ref_radius, P);
+	} else {
+		arc_shape.arc.S = P;
+	}
+	arc_shape.arc.S_angle = 
+		circle2::get_angle_of_point(arc_shape.arc.to_circle(), arc_shape.arc.S);
+}
+
+void construct_arc(const App &app, Shapes &shapes, Vec2 const &P) {
+	auto &arc_shape = shapes.construct.arc_shape;
+	auto &construct = shapes.construct;
+
+	if (app.input.mouse_click) {
+		if (construct.point_set == PointSet::NONE) {
+			construct.point_set = PointSet::FIRST;
+			construct.shape = ConstructShape::ARC;
+			arc_shape.arc.C = P;
+			arc_shape.concealed = construct.concealed;
+		} else if (construct.point_set == PointSet::FIRST) {
+			construct.point_set = PointSet::SECOND;
+			set_S(shapes, arc_shape, P);
+		} else if (shapes.construct.point_set == PointSet::SECOND) {
+			set_E(app, shapes, arc_shape, P);
+			arc_shape.concealed = construct.concealed;
+			arc_shape.id = shapes.id_counter++;
+			shapes.arcs.push_back(arc_shape);
+			shapes.quantity_change = true;
+			construct.clear();
 		}
 	} else if (shapes.construct.point_set == PointSet::FIRST) {
-		if (app.shift_set) {
-			double last_radius = radius_last_selected_circle();
-			if (last_radius >= 0.) {
-				temp_arc.set_exact_circum_point(last_radius, pt);
-			} else {
-				temp_arc.circum_point = pt;
-			}
-		} else {
-			temp_arc.circum_point = pt;
-		}
+		set_S(shapes, arc_shape, P);
+		arc_shape.arc.S_angle = circle2::get_angle_of_point(arc_shape.arc.to_circle(), arc_shape.arc.S);
 	} else if (shapes.construct.point_set == PointSet::SECOND) {
-		temp_arc.end_point = temp_arc.project_point(pt);
-		Vec2 v1 = {temp_arc.circum_point.x - temp_arc.center.x,
-							 temp_arc.circum_point.y - temp_arc.center.y};
-		Vec2 v2 = {temp_arc.end_point.x - temp_arc.center.x,
-							 temp_arc.end_point.y - temp_arc.center.y};
-		double cross = v1.x * v2.y - v1.y * v2.x;
-		cout << "cross: " << cross << endl;
+		set_E(app, shapes, arc_shape, P);
 	}
 }
 
-void construct(AppState &app, Vec2 const &pt) {
-  switch (app.mode) {
+void construct(const App &app, Shapes &shapes, Vec2 const &P) {
+  switch (app.context.mode) {
     case AppMode::NORMAL:    return;
-    case AppMode::LINE:      construct_line(app, pt);   break;
-    case AppMode::CIRCLE:    construct_circle(app, pt); break;
-    case AppMode::ARC:       construct_arc(app, pt);    break;
+    case AppMode::LINE:      construct_line(app, shapes, P);   break;
+    case AppMode::CIRCLE:    construct_circle(app, shapes, P); break;
+    case AppMode::ARC:       construct_arc(app, shapes, P);    break;
 		default:								 return;
   }
 }

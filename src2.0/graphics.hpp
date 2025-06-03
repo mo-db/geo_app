@@ -50,14 +50,15 @@ struct Circle2 {
 	Vec2 C{}, P{};
 	Circle2() = default;
 	Circle2(const Vec2 C, const Vec2 P) : C{C}, P{P} {}
+	Circle2(const Vec2 C, const double d) : C{C} { P = {C.x + d, C.y}; }
 	double radius() const {
 		return sqrt(pow((C.x - P.x), 2.0) + pow((C.y - P.y), 2.0));
 	}
 };
 
 namespace circle2 {
-double get_angle_of_point(Circle2 &circle, const Vec2 &P);
-Vec2 project_point(Circle2 &circle, const Vec2 &P);
+double get_angle_of_point(const Circle2 &circle, const Vec2 &P);
+Vec2 project_point(const Circle2 &circle, const Vec2 &P);
 void set_P(Circle2 &circle, const double &radius);
 void set_exact_P(Circle2 &circle, const double &radius, const Vec2 &P);
 } // namespace circle2
@@ -71,23 +72,18 @@ struct Arc2 {
 	double radius() const {
 		return sqrt(pow((C.x - S.x), 2.0) + pow((C.y - S.y), 2.0));
 	}
-	Circle2 to_circle() {
+	Circle2 to_circle() const {
 		return Circle2{C, S};
 	}
 };
 namespace arc2 {
 bool angle_on_arc(const double &angle);
+void set_S(Arc2 &arc, const double &radius, const Vec2 &P);
 } // namespace arc2
 
 namespace graphics {
-constexpr uint32_t fg_color = 0x00000000;					//black
-constexpr uint32_t bg_color = 0x00FFFFFF;					//white
-constexpr uint32_t hl_color = 0x00FF0000;					//red
-constexpr uint32_t sel_color = 0x00FF0000;				//red
-constexpr uint32_t conceal_color = 0x00CCCCCC;		//grey
-constexpr uint32_t gen_color = 0x000000FF;				//blue
-constexpr uint32_t edit_color = 0x0000FF00;				//green
-																									//
+
+
 std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2);
 std::vector<Vec2> Line2_Circle2_intersect(const Line2 &l, const Circle2 &c);
 std::vector<Vec2> Circle2_Circle2_intersect(const Circle2 &c1, const Circle2 &c2);

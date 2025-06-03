@@ -1601,19 +1601,6 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 			}
 		}
 
-		// draw geo_selected shapes and points in specific color
-		// for (auto &gen_line : gen_shapes.lines) {
-		// 	Vec2 rad_point = { gen_line.start_point.x + 20, gen_line.start_point.y };
-		// 	draw_circle(app, pixels_locked, Circle2 {gen_line.start_point, rad_point}, graphics::gen_color); 
-		// 	draw_line(app, pixels_locked, gen_line.line, graphics::gen_color);
-		// }
-		// for (auto &gen_circle : gen_shapes.circles) {
-		// 	Vec2 rad_point = { gen_circle.start_point.x + 20, gen_circle.start_point.y };
-		// 	draw_circle(app, pixels_locked, Circle2 {gen_circle.start_point, rad_point}, graphics::gen_color); 
-		// 	draw_circle(app, pixels_locked, gen_circle.circle, graphics::gen_color); 
-		// }
-
-
 		// draw edit line
 		// if (shapes.line_in_construction) {
 		// 	draw_line(app, pixels_locked, shapes.edit_line, graphics::edit_color);
