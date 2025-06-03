@@ -2,10 +2,15 @@
 #pragma once
 #include <cmath>
 #include <cassert>
+#include <iostream>
+#include <fstream>
 #include <numbers>
 #include <chrono>
 #include <vector>
+#include <algorithm>
 #include <SDL3/SDL.h>
+
+using namespace std;
 
 namespace gk {
 	constexpr double epsilon = 1e-6;

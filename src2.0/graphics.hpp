@@ -26,8 +26,8 @@ Vec2 operator*(double d, const Vec2 &v);
 namespace vec2 {
 double dot(const Vec2 &a, const Vec2 &b);
 double distance(const Vec2 &a, const Vec2 &b);
-bool test_equal(const Vec2 &a, const Vec2 &b);
-bool test_equal_precise(const Vec2 &a, const Vec2 &b);
+bool equal_int_epsilon(const Vec2 &a, const Vec2 &b);
+bool equal_epsilon(const Vec2 &a, const Vec2 &b);
 } // namespace vec2
 
 struct Line2 {

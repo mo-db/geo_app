@@ -23,11 +23,11 @@ double dot(const Vec2 &a, const Vec2 &b) {
 double distance(const Vec2 &a, const Vec2 &b) {
   return std::sqrt(std::pow(a.x - b.x, 2.0) + std::pow(a.y - b.y, 2.0));
 }
-bool test_equal(const Vec2 &a, const Vec2 &b) {
+bool equal_int_epsilon(const Vec2 &a, const Vec2 &b) {
   return std::abs(a.x - b.x) < gk::int_epsilon &&
          std::abs(a.y - b.y) < gk::int_epsilon;
 }
-bool test_equal_precise(const Vec2 &a, const Vec2 &b) {
+bool equal_epsilon(const Vec2 &a, const Vec2 &b) {
   return std::abs(a.x - b.x) < gk::epsilon &&
 				 std::abs(a.y - b.y) < gk::epsilon;
 }

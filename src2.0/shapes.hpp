@@ -15,6 +15,7 @@ struct Shape {
 
 struct NodeShape : Shape {
 	Vec2 P{};
+	std::vector<int> ids;
 	NodeShape() = default;
 	NodeShape(const int id, const Vec2 &P)
 		: Shape{id}, P{P} {}
@@ -56,15 +57,17 @@ struct Construct {
 	void clear() {
 		shape = ConstructShape::NONE;
 		point_set = PointSet::NONE;
+		concealed = false;
 	}
 };
 
 enum struct EditShape { NONE, LINE, CIRCLE, ARC, };
 struct Edit {
 	EditShape shape = EditShape::NONE;
-	LineShape line_shape {};
-	CircleShape circle_shape {};
-	ArcShape arc_shape {};
+	bool in_edit = false;
+	LineShape line {};
+	CircleShape circle {};
+	ArcShape arc {};
 };
 
 // can be selected in normal mode, used when modkey draw new shape
@@ -81,7 +84,6 @@ struct Snap {
 	bool enabled_for_node_shapes = true;
 
 	Vec2 point;
-	int id {-1};
 	int index {};
 	bool is_node_shape = false;
 	bool in_distance = false;
@@ -121,10 +123,17 @@ void construct_line(const App &app, Shapes &shapes, const Vec2 &pt);
 void construct_circle(const App &app, Shapes &shapes, const Vec2 &pt);
 void construct_arc(const App &app, Shapes &shapes, const Vec2 &pt);
 } // namespace detail
-void construct(App &, const Vec2 &point);
+void construct(const App &app, Shapes &shapes, const Vec2 &point);
 
 // editing shapes TODO
 
+void clear_edit(const App &app, Shapes &shapes);
+namespace detail {
+void line_edit_update(const App &app, Shapes &shapes);
+void circle_edit_update(const App &app, Shapes &shapes);
+void arc_edit_update(const App &app, Shapes &shapes);
+} // namespace detail
+void update_edit(const App &app, Shapes &shapes);
 
 // shape reference TODO
 // if in snap and click with special key held 
@@ -132,5 +141,7 @@ void construct(App &, const Vec2 &point);
 // on drawing check if id = ref_id -> change color
 
 // functions for snapping
-bool update_snap(App &app);
+bool update_snap(const App &app, Shapes &shapes);
+void maybe_append_node(std::vector<NodeShape> &node_shapes, Vec2 &P,
+                           int shape_id, bool point_concealed);
 } // namespace shapes

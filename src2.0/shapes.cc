@@ -188,90 +188,211 @@ void construct(const App &app, Shapes &shapes, Vec2 const &P) {
   }
 }
 
-bool update_snap(AppState &app) {
-	snap_index = -1;
-	snap_point = {};
-	in_snap_distance = false;
-	snap_is_id_point = false;
-	snap_shape = SnapShape::NONE;
+bool update_snap(const App &app, Shapes &shapes) {
+	auto &snap = shapes.snap;
+	snap.index = -1;
+	snap.point = {};
+	snap.in_distance = false;
+	snap.is_node_shape = false;
+	snap.shape = SnapShape::NONE;
 
-	if (snap_to_id_pts) {
-		for (size_t index = 0; index < ixn_points.size(); index++) {
-			if (get_point_point_distance(ixn_points[index].p, app.mouse) < snap_distance) {
-				snap_point = ixn_points[index].p;
-				snap_shape = SnapShape::IXN_POINT;
-				snap_is_id_point = true;
-				snap_index = index;
+	if (snap.enabled_for_node_shapes) {
+		for (size_t index = 0; index < shapes.ixn_points.size(); index++) {
+			if (vec2::distance(shapes.ixn_points[index].P, app.input.mouse) < snap.distance) {
+				snap.point = shapes.ixn_points[index].P;
+				snap.shape = SnapShape::IXN_POINT;
+				snap.is_node_shape = true;
+				snap.index = index;
 				return true;
 			}	
 		}
 
-		for (size_t index = 0; index < def_points.size(); index++) {
-			if (get_point_point_distance(def_points[index].p, app.mouse) < snap_distance) {
-				snap_point = def_points[index].p;
-				snap_shape = SnapShape::DEF_POINT;
-				snap_is_id_point = true;
-				snap_index = index;
+		for (size_t index = 0; index < shapes.def_points.size(); index++) {
+			if (vec2::distance(shapes.def_points[index].P, app.input.mouse) < snap.distance) {
+				snap.point = shapes.def_points[index].P;
+				snap.shape = SnapShape::DEF_POINT;
+				snap.is_node_shape = true;
+				snap.index = index;
 				return true;
 			}	
 		}
 	}
 
-	for (size_t index = 0; index < lines.size(); index++) {
-		Line2 &line = lines[index];
-		if (line.get_distance_point_to_seg(app.mouse) < snap_distance) {
-			Vec2 projected_point = line.project_point_to_ray(app.mouse);
-			double p1_distance = get_point_point_distance(app.mouse, line.p1);
-			double p2_distance = get_point_point_distance(app.mouse, line.p2);
-			if (line.check_point_within_seg_bounds(projected_point)) {
-				snap_point = projected_point;
-				snap_shape = SnapShape::LINE;
-				snap_is_id_point = false;
-				snap_index = index;
+	for (size_t index = 0; index < shapes.lines.size(); index++) {
+		LineShape &line_shape = shapes.lines[index];
+		if (line2::get_distance_point_to_seg(line_shape.line, app.input.mouse) < snap.distance) {
+			Vec2 projected_point = line2::project_point(line_shape.line, app.input.mouse);
+			double p1_distance = vec2::distance(app.input.mouse, line_shape.line.A);
+			double p2_distance = vec2::distance(app.input.mouse, line_shape.line.B);
+			if (line2::point_in_segment_bounds(line_shape.line, projected_point)) {
+				snap.point = projected_point;
+				snap.shape = SnapShape::LINE;
+				snap.is_node_shape = false;
+				snap.index = index;
 				return true;
-			} else if (p1_distance < snap_distance) {
-				snap_point = line.p1;
-				snap_shape = SnapShape::LINE;
-				snap_is_id_point = false;
-				snap_index = index;
+			} else if (p1_distance < snap.distance) {
+				snap.point = line_shape.line.A;
+				snap.shape = SnapShape::LINE;
+				snap.is_node_shape = false;
+				snap.index = index;
 				return true;
-			} else if (p2_distance < snap_distance) {
-				snap_point = line.p2;
-				snap_shape = SnapShape::LINE;
-				snap_is_id_point = false;
-				snap_index = index;
+			} else if (p2_distance < snap.distance) {
+				snap.point = line_shape.line.B;
+				snap.shape = SnapShape::LINE;
+				snap.is_node_shape = false;
+				snap.index = index;
 				return true;
 			}
 		}
 	}
 
-	for (size_t index = 0; index < circles.size(); index++) {
-		Circle2 &circle = circles[index];
-		double distance = get_point_point_distance(circle.center, app.mouse);
-		if (distance < circle.radius() + snap_distance &&
-				distance > circle.radius() - snap_distance) {
-			snap_point = circle.project_point(app.mouse);
-			snap_shape = SnapShape::CIRCLE;
-			snap_is_id_point = false;
-			snap_index = index;
+	for (size_t index = 0; index < shapes.circles.size(); index++) {
+		CircleShape &circle_shape = shapes.circles[index];
+		double distance = vec2::distance(circle_shape.circle.C, app.input.mouse);
+		if (distance < circle_shape.circle.radius() + snap.distance &&
+				distance > circle_shape.circle.radius() - snap.distance) {
+			snap.point = circle2::project_point(circle_shape.circle, app.input.mouse);
+			snap.shape = SnapShape::CIRCLE;
+			snap.is_node_shape = false;
+			snap.index = index;
 			return true;
 		}
 	}
 
-	for (size_t index = 0; index < arcs.size(); index++) {
-		Arc2 &arc = arcs[index];
-		double distance = get_point_point_distance(arc.center, app.mouse);
-		if (distance < arc.radius() + snap_distance &&
-				distance > arc.radius() - snap_distance) {
-			if (arc.angle_between_arc_points(arc.get_angle_of_point(app.mouse))) {
-			snap_point = arc.project_point(app.mouse);
-			snap_shape = SnapShape::ARC;
-			snap_is_id_point = false;
-			snap_index = index;
+	for (size_t index = 0; index < shapes.arcs.size(); index++) {
+		ArcShape &arc_shape = shapes.arcs[index];
+		double distance = vec2::distance(arc_shape.arc.C, app.input.mouse);
+		if (distance < arc_shape.arc.radius() + snap.distance &&
+				distance > arc_shape.arc.radius() - snap.distance) {
+			if (arc2::angle_on_arc(circle2::get_angle_of_point(
+					arc_shape.arc.to_circle(), app.input.mouse))) {
+			snap.point = circle2::project_point(arc_shape.arc.to_circle(), app.input.mouse);
+			snap.shape = SnapShape::ARC;
+			snap.is_node_shape = false;
+			snap.index = index;
 			return true;
 			}
 		}
 	}
 	return false;
 }
+
+void maybe_append_node(std::vector<NodeShape> &node_shapes, Vec2 &P,
+                           int shape_id, bool point_concealed) {
+  bool point_dup = false;
+  for (auto &node_shape: node_shapes) {
+		if (vec2::equal_int_epsilon(node_shape.P, P)) {
+      point_dup = true;
+      for (auto &id : node_shape.ids) {
+				if (shape_id == id) {
+					return;
+        }
+      }
+			// add id to id point, maybe change conceal status of id point
+			if (node_shape.concealed && !point_concealed) {
+				node_shape.concealed = false;
+			}
+      node_shape.ids.push_back(shape_id);
+			return;
+    }
+  }
+	if (!point_dup) {
+		// if new point push back and maybe flag as concealed
+		node_shapes.push_back(NodeShape{shape_id, P});
+		if (point_concealed) {
+			node_shapes.back().concealed = true;
+		}
+  }
+}
+
+void clear_edit(const App &app, Shapes &shapes) {
+	if (shapes.edit.in_edit) {
+		if (shapes.edit.shape == EditShape::LINE) {
+			shapes.lines.push_back(shapes.edit.line);
+		} else if (shapes.edit.shape == EditShape::CIRCLE) {
+			shapes.circles.push_back(shapes.edit.circle);
+		} else if (shapes.edit.shape == EditShape::ARC) {
+			shapes.arcs.push_back(shapes.edit.arc);
+		}
+	}
+	shapes.edit.in_edit = false;
+	shapes.snap.enabled_for_node_shapes = false;
+}
+
+void line_edit_update(const App &app, Shapes &shapes) {
+	Vec2 P{};
+	if (shapes.snap.in_distance) {
+		P = line2::project_point(shapes.edit.line.line, shapes.snap.point);
+	} else {
+		P = line2::project_point(shapes.edit.line.line, app.input.mouse);
+	}
+	if (vec2::distance(shapes.edit.line.line.A, app.input.mouse) <
+			vec2::distance(shapes.edit.line.line.B, app.input.mouse)) {
+		shapes.edit.line.line.A = P;
+	} else {
+		shapes.edit.line.line.B = P;
+	}
+}
+
+void circle_edit_update(const App &app, Shapes &shapes) {
+}
+void arc_edit_update(const App &app, Shapes &shapes) {
+}
+
+// maybe automatically disable node snap for first selecting 
+// only works for lines at the moment
+void update_edit(const App &app, Shapes &shapes) {
+	if (!shapes.edit.in_edit) {
+		if (app.input.mouse_click) {
+			if (shapes.snap.shape == SnapShape::LINE) {
+				shapes.edit.line = shapes.lines[shapes.snap.index];
+				shapes.edit.in_edit = true;
+				shapes.lines.erase(shapes.lines.begin() + shapes.snap.index);
+			} else if (shapes.snap.shape == SnapShape::CIRCLE) {
+				shapes.edit.circle = shapes.circles[shapes.snap.index];
+				shapes.edit.in_edit = true;
+				shapes.circles.erase(shapes.circles.begin() + shapes.snap.index);
+			} else if (shapes.snap.shape == SnapShape::ARC) {
+				shapes.edit.arc = shapes.arcs[shapes.snap.index];
+				shapes.edit.in_edit = true;
+				shapes.arcs.erase(shapes.arcs.begin() + shapes.snap.index);
+			}
+		} else {
+			shapes.snap.enabled_for_node_shapes = false;
+		}
+	} else {
+		shapes.snap.enabled_for_node_shapes = true;
+		if (app.input.mouse_click) {
+			if (shapes.edit.shape == EditShape::LINE) {
+				line_edit_update(app, shapes);
+				shapes.lines.push_back(shapes.edit.line);
+				shapes.quantity_change = true;
+				shapes.edit.in_edit = false;
+			}
+			if (shapes.edit.shape == EditShape::CIRCLE) {
+				circle_edit_update(app, shapes);
+				shapes.lines.push_back(shapes.edit.line);
+				shapes.quantity_change = true;
+				shapes.edit.in_edit = false;
+			}
+			if (shapes.edit.shape == EditShape::ARC) {
+				arc_edit_update(app, shapes);
+				shapes.lines.push_back(shapes.edit.line);
+				shapes.quantity_change = true;
+				shapes.edit.in_edit = false;
+			}
+		} else {
+			if (shapes.edit.shape == EditShape::LINE) {
+				line_edit_update(app, shapes);
+			}
+			if (shapes.edit.shape == EditShape::CIRCLE) {
+				circle_edit_update(app, shapes);
+			}
+			if (shapes.edit.shape == EditShape::ARC) {
+				arc_edit_update(app, shapes);
+			}
+		}
+	}
+}
+
 } // namespace shapes

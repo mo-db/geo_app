@@ -1,0 +1,513 @@
+#include "core.hpp"
+#include "app.hpp"
+#include "graphics.hpp"
+#include "draw.hpp"
+#include "shapes.hpp"
+#include "gen.hpp"
+#include "serialize.hpp"
+
+constexpr const int gk_window_width = 1920/2;
+constexpr int gk_window_height = 1080/2;
+
+int app_init(App &app);
+
+// info
+void print_node_ids_on_click(Shapes &shapes);
+
+void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes);
+void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes);
+
+void update_nodes(App &app, Shapes &shapes);
+
+void check_for_changes(App &app, Shapes &shapes);
+
+int main() {
+	App app;
+	Shapes shapes;
+	GenShapes gen_shapes;
+	if (!app_init(app)) {
+		return 1;
+	}
+	while(app.context.keep_running) {
+		app::reset_frame_state(app);
+		shapes.snap.in_distance = shapes::update_snap(app, shapes);
+
+		// update node points
+		if (shapes.recalculate) {
+			update_nodes(app, shapes);
+		}
+
+		// update construction
+		if (shapes.snap.in_distance) {
+			shapes::construct(app, shapes, shapes.snap.point);
+		} else {
+			shapes::construct(app, shapes, app.input.mouse);
+		}
+
+		switch (app.context.mode) {
+			case AppMode::NORMAL:
+				break;
+			case AppMode::LINE:
+				break;
+			case AppMode::CIRCLE:
+				break;
+			case AppMode::ARC:
+				break;
+			case AppMode::EDIT:
+				shapes::update_edit(app, shapes);
+				break;
+			case AppMode::GEN:
+				// if (shapes.snap.in_distance && app.input.mouse_click) {
+				// 	gen::maybe_select(app, shapes, gen_shapes);
+				// 	if (shapes.snap.is_node_shape && app.input.ctrl_set == true) {
+				// 		gen::toogle_hl_of_id_points(shapes);
+				// 	}
+				// }
+				break;
+		}
+
+		draw::draw_shapes(app, shapes);
+		check_for_changes(app, shapes);
+		SDL_Delay(10);
+	}
+
+}
+
+int app_init(App &app) {
+  if (!SDL_Init(SDL_INIT_VIDEO)) {
+    SDL_Log("Couldn't initialize SDL: %s", SDL_GetError());
+    return SDL_APP_FAILURE;
+  }
+
+	app.video.window = NULL;
+	app.video.renderer = NULL;
+  if (!SDL_CreateWindowAndRenderer("examples/renderer/streaming-textures",
+				gk_window_width, gk_window_height, SDL_WINDOW_HIGH_PIXEL_DENSITY |
+				SDL_WINDOW_MOUSE_CAPTURE, &app.video.window, &app.video.renderer)) {
+    SDL_Log("Couldn't create window/renderer: %s", SDL_GetError());
+    return SDL_APP_FAILURE;
+  }
+
+	app.video.w_pixels = gk_window_width *
+		SDL_GetWindowPixelDensity(app.video.window);
+	app.video.h_pixels = gk_window_height *
+		SDL_GetWindowPixelDensity(app.video.window);
+
+	// texture create with pixels and not window size . retina display scaling
+  app.video.window_texture = SDL_CreateTexture(
+			app.video.renderer, SDL_PIXELFORMAT_XRGB8888,
+			SDL_TEXTUREACCESS_STREAMING, 
+			app.video.w_pixels, app.video.h_pixels);
+
+	if (!app.video.window_texture) {
+    SDL_Log("Couldn't create streaming texture: %s", SDL_GetError());
+    return SDL_APP_FAILURE;
+	}
+  app.video.density = SDL_GetWindowPixelDensity(app.video.window);
+	std::cout << "w_pixels: " << app.video.w_pixels << std::endl;
+	std::cout << "h_pixels: " << app.video.h_pixels << std::endl;
+
+	app.context.keep_running = true;
+
+  app.input.mouse.x = 0;
+  app.input.mouse.y = 0;
+  app.input.mouse_left_down = 0;
+  app.input.mouse_right_down = 0;
+  return 1;
+}
+
+// TODO move to shapes
+void print_node_ids_on_click(Shapes &shapes) {
+	if (shapes.snap.in_distance) {
+		if (shapes.snap.shape == SnapShape::IXN_POINT) {
+			for (auto &ixn_point : shapes.ixn_points) {
+				if (ixn_point.P.x == shapes.snap.point.x &&
+						ixn_point.P.y == shapes.snap.point.y) {
+					cout << "IS Point: " << ixn_point.P.x << ", " << ixn_point.P.y << endl;
+					cout << "ids: " << endl;
+					for (auto &id : ixn_point.ids) {
+						cout << id << ", ";
+					}
+					cout << endl;
+				}
+			}
+			for (auto &def_point : shapes.def_points) {
+				if (def_point.P.x == shapes.snap.point.x &&
+						def_point.P.y == shapes.snap.point.y) {
+					cout << "SD Point: " << def_point.P.x << ", " << def_point.P.y << endl;
+					cout << "ids: " << endl;
+					for (auto &id : def_point.ids) {
+						cout << id << ", ";
+					}
+					cout << endl;
+				}
+			}
+		}
+	}
+}
+
+// TODO move to shapes
+void clear_hl(Shapes &shapes) {
+	for (auto &ixn_point: shapes.ixn_points) {ixn_point.highlighted = false;}
+	for (auto &def_point : shapes.def_points) {def_point.highlighted = false;}
+	for (auto &line: shapes.lines) {line.highlighted = false;}
+	for (auto &circle: shapes.circles) {circle.highlighted = false;}
+	for (auto &arc: shapes.arcs) {arc.highlighted = false;}
+}
+
+void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes) {
+	// for all modes
+	shapes.construct.clear();
+	clear_hl(shapes);
+	shapes.snap.enabled_for_node_shapes = true;
+
+	switch (app.context.mode) {
+		case AppMode::NORMAL:
+			break;
+		case AppMode::LINE:
+			break;
+		case AppMode::CIRCLE:
+			break;
+		case AppMode::ARC:
+			break;
+		case AppMode::EDIT:
+			shapes::clear_edit(app, shapes);
+			break;
+		case AppMode::GEN:
+			gen_shapes.lines.clear();
+			gen_shapes.circles.clear();
+			gen_shapes.arcs.clear();
+			break;
+	}
+}
+
+void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    switch (event.type) {
+    case SDL_EVENT_QUIT:
+      app.context.keep_running = false;
+      break;
+		case SDL_EVENT_KEY_UP:
+			switch(event.key.key) {
+				case SDLK_LSHIFT:
+					if (!event.key.repeat) {
+						app.input.shift_set = false;
+					}
+					break;
+				case SDLK_LCTRL:
+					if (!event.key.repeat) {
+						app.input.ctrl_set = false;
+					}
+					break;
+			}
+			break;
+		case SDL_EVENT_KEY_DOWN:
+			switch(event.key.key) {
+				case SDLK_LSHIFT:
+					if (!event.key.repeat) {
+						app.input.shift_set = true;
+					}
+					break;
+				case SDLK_LCTRL:
+					if (!event.key.repeat) {
+						app.input.ctrl_set = true;
+					}
+					break;
+        case SDLK_ESCAPE:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            // app.context.mode = AppMode::NORMAL;
+          }
+          break;
+        case SDLK_K:
+          if (!event.key.repeat) {
+						if (app.context.mode == AppMode::ARC) {
+							if (shapes.construct.arc_shape.arc.clockwise == true) {
+								shapes.construct.arc_shape.arc.clockwise = false;
+							} else {
+								shapes.construct.arc_shape.arc.clockwise = true;
+							}
+						}
+          }
+          break;
+        case SDLK_H:
+          if (!event.key.repeat) {
+						if (app.context.mode == AppMode::LINE ||
+								app.context.mode == AppMode::LINE ||
+								app.context.mode == AppMode::ARC) {
+							if (shapes.construct.concealed == true) {
+								shapes.construct.concealed = false;
+							} else {
+								shapes.construct.concealed = true;
+							}
+						}
+          }
+          break;
+        case SDLK_U:
+          if (!event.key.repeat) {
+						if (app.context.mode == AppMode::LINE ||
+								app.context.mode == AppMode::LINE ||
+								app.context.mode == AppMode::ARC) {
+							if (shapes.snap.enabled_for_node_shapes == true) {
+								shapes.snap.enabled_for_node_shapes = false;
+							} else {
+								shapes.snap.enabled_for_node_shapes = true;
+							}
+						}
+          }
+          break;
+				case SDLK_A:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.context.mode = AppMode::ARC;
+          }
+					break;
+				case SDLK_C:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.context.mode = AppMode::CIRCLE;
+          }
+					break;
+        case SDLK_L:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.context.mode = AppMode::LINE;
+          }
+          break;
+				case SDLK_G:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.context.mode = AppMode::GEN;
+          }
+          break;
+				case SDLK_E:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.context.mode = AppMode::EDIT;
+          }
+          break;
+				case SDLK_S:
+          if (!event.key.repeat) {
+						std::string save_file = "save_file";
+						serialize::save_appstate(shapes, save_file);
+          }
+          break;
+				case SDLK_O:
+          if (!event.key.repeat) {
+						std::string save_file = "save_file";
+						serialize::load_appstate(shapes, save_file);
+          }
+          break;
+				case SDLK_BACKSPACE:
+          if (!event.key.repeat) {
+						if (app.context.mode == AppMode::NORMAL) {
+							shapes.lines.erase(remove_if(shapes.lines.begin(), shapes.lines.end(),
+									[](const LineShape &line_shape){ return line_shape.selected; }), shapes.lines.end());
+							shapes.circles.erase(remove_if(shapes.circles.begin(), shapes.circles.end(),
+									[](const CircleShape &circle_shape){ return circle_shape.selected; }), shapes.circles.end());
+							shapes.arcs.erase(remove_if(shapes.arcs.begin(), shapes.arcs.end(),
+									[](const ArcShape &arc_shape){ return arc_shape.selected; }), shapes.arcs.end());
+							shapes.quantity_change = true;
+						}
+          }
+          break;
+				case SDLK_Y:
+					if (!event.key.repeat) {
+						std::ofstream outf{ "Sample.txt" };
+						vector<double> relations {};
+						vector<double> relations_merge {};
+
+						for (auto &gen : gen_shapes.circles) {
+							relations = gen::circle_relations(app, shapes, gen);
+							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
+						}
+
+						for (auto &gen: gen_shapes.lines) {
+							relations = gen::line_relations(app, shapes, gen);
+							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
+						}
+
+						for (auto &gen : gen_shapes.arcs) {
+							relations = gen::arc_relations(app, shapes, gen);
+							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
+						}
+
+						cout << "Relations: " << endl;
+						for (auto &relation : relations_merge) {
+							cout << relation << ", ";
+							outf << relation << " ";
+						}
+						cout << endl;
+					}
+					break;
+				case SDLK_P:
+					if (!event.key.repeat) {
+						cout << "MOUSE: " << app.input.mouse.x << ","
+								 << app.input.mouse.y << endl;
+					}
+					break;
+			}
+    case SDL_EVENT_MOUSE_MOTION:
+      app.input.mouse.x = SDL_lround(event.motion.x * app.video.density);
+      app.input.mouse.y = SDL_lround(event.motion.y * app.video.density);
+      break;
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+      app.input.mouse_left_down = event.button.down;
+			app.input.mouse_click = true;
+      break;
+    case SDL_EVENT_MOUSE_BUTTON_UP:
+      app.input.mouse_left_down = event.button.down;
+      break;
+		}
+	}
+}
+
+// append shape-defining and ixn_points to the IdPoints vector
+void update_nodes(App &app, Shapes &shapes) {
+	shapes.ixn_points.clear();
+	shapes.def_points.clear();
+	// append line-line intersections
+	for (int i = 0; i < shapes.lines.size(); i++) {
+		LineShape &l1 = shapes.lines[i];
+		for (int j = i+1; j < shapes.lines.size(); j++) {
+			LineShape &l2 = shapes.lines[i];
+			vector<Vec2> ixn_points = graphics::Line2_Line2_intersect(l1.line, l2.line);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (l1.concealed || l2.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				shapes::maybe_append_node(shapes.ixn_points,
+															ixn_point, l1.id, concealed);
+				shapes::maybe_append_node(shapes.ixn_points,
+															ixn_point, l2.id, concealed);
+			}
+		}
+	}
+	// append line-circle intersections
+	for (int i = 0; i < shapes.circles.size(); i++) {
+		CircleShape &c = shapes.circles.at(i);
+		for (int j = 0; j < shapes.lines.size(); j++) {
+			LineShape &l = shapes.lines.at(j);
+			vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(l.line, c.circle);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (c.concealed || l.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, l.id, concealed);
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, c.id, concealed);
+			}
+		}
+	}
+	// append circle-circle intersections
+	for (int i = 0; i < shapes.circles.size(); i++) {
+		CircleShape &c1 = shapes.circles.at(i);
+		for (int j = i+1; j < shapes.circles.size(); j++) {
+			CircleShape &c2 = shapes.circles.at(j);
+			vector<Vec2> ixn_points = graphics::Circle2_Circle2_intersect(c1.circle, c2.circle);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (c1.concealed || c2.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, c1.id, concealed);
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, c2.id, concealed);
+			}
+		}
+	}
+
+	// append line-arc intersections
+	for (int i = 0; i < shapes.arcs.size(); i++) {
+		ArcShape &a = shapes.arcs.at(i);
+		for (int j = 0; j < shapes.lines.size(); j++) {
+			LineShape &l = shapes.lines.at(j);
+			vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(a.arc, l.line);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (a.concealed || l.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, l.id, concealed);
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, a.id, concealed);
+			}
+		}
+	}
+
+	// append arc-circle intersections
+	for (int i = 0; i < shapes.arcs.size(); i++) {
+		ArcShape &a = shapes.arcs.at(i);
+		for (int j = i+1; j < shapes.circles.size(); j++) {
+			CircleShape &c = shapes.circles.at(j);
+			vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(a.arc, c.circle);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (a.concealed || c.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, a.id, concealed);
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, c.id, concealed);
+			}
+		}
+	}
+
+	// append arc-arc intersections
+	for (int i = 0; i < shapes.arcs.size(); i++) {
+		ArcShape &a1 = shapes.arcs.at(i);
+		for (int j = i+1; j < shapes.circles.size(); j++) {
+			ArcShape &a2 = shapes.arcs.at(j);
+			vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(a1.arc, a2.arc);
+			// maybe change ixn_point status to concealed
+			bool concealed = false;
+			if (a1.concealed || a2.concealed) {
+				concealed = true;
+			}
+			for (auto &ixn_point : ixn_points) {
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, a1.id, concealed);
+				shapes::maybe_append_node(shapes.ixn_points, ixn_point, a2.id, concealed);
+			}
+		}
+	}
+
+	// append shape-defining points
+	for (auto &line_shape : shapes.lines) {
+		bool concealed = false;
+		if (line_shape.concealed) {
+			concealed = true;
+		}
+		shapes::maybe_append_node(shapes.def_points, line_shape.line.A, line_shape.id, concealed);
+		shapes::maybe_append_node(shapes.def_points, line_shape.line.A, line_shape.id, concealed);
+	}
+	for (auto &circle_shape : shapes.circles) {
+		bool concealed = false;
+		if (circle_shape.concealed) {
+			concealed = true;
+		}
+		shapes::maybe_append_node(shapes.def_points, circle_shape.circle.C, circle_shape.id, concealed);
+		// id_point_maybe_append(app, shapes.def_points, circle.circum_point, circle.id);
+	}
+	for (auto &arc_shape : shapes.arcs) {
+		bool concealed = false;
+		if (arc_shape.concealed) {
+			concealed = true;
+		}
+		shapes::maybe_append_node(shapes.def_points, arc_shape.arc.C, arc_shape.id, concealed);
+		shapes::maybe_append_node(shapes.def_points, arc_shape.arc.S, arc_shape.id, concealed);
+		shapes::maybe_append_node(shapes.def_points, arc_shape.arc.E, arc_shape.id, concealed);
+	}
+}
+
+void check_for_changes(App &app, Shapes &shapes) {
+	if (shapes.quantity_change) {
+		shapes.recalculate = true;
+	} else {
+		shapes.recalculate = false;
+	}
+	shapes.quantity_change = false;
+}
