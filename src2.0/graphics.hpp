@@ -17,38 +17,17 @@ struct Vec2 {
   }
 };
 
-// operator overloads
-Vec2 operator+(const Vec2 &a, const Vec2 &b) {
-	return {a.x + b.x, a.y + b.y};
-}
-Vec2 operator+(const Vec2 &a, const double d) {
-	return {a.x + d, a.y + d};
-}
-Vec2 operator-(const Vec2 &a, const Vec2 &b) {
-	return {a.x - b.x, a.y - b.y};
-}
-Vec2 operator*(const Vec2 &v, double d) {
-	return {v.x * d, v.y * d};
-}
-Vec2 operator*(double d, const Vec2 &v) {
-	return v * d;
-}
+Vec2 operator+(const Vec2 &a, const Vec2 &b);
+Vec2 operator+(const Vec2 &a, const double d);
+Vec2 operator-(const Vec2 &a, const Vec2 &b);
+Vec2 operator*(const Vec2 &v, double d);
+Vec2 operator*(double d, const Vec2 &v);
 
 namespace vec2 {
-double vec2_dot(const Vec2 &a, const Vec2 &b) {
-	return a.x * b.x + a.y * b.y;
-}
-double vec2_distance(const Vec2 &a, const Vec2 &b) {
-  return std::sqrt(std::pow(a.x - b.x, 2.0) + std::pow(a.y - b.y, 2.0));
-}
-bool vec2_test_equal(const Vec2 &a, const Vec2 &b) {
-  return std::abs(a.x - b.x) < gk::int_epsilon &&
-         std::abs(a.y - b.y) < gk::int_epsilon;
-}
-bool vec2_test_equal_precise(const Vec2 &a, const Vec2 &b) {
-  return std::abs(a.x - b.x) < gk::epsilon &&
-				 std::abs(a.y - b.y) < gk::epsilon;
-}
+double dot(const Vec2 &a, const Vec2 &b);
+double distance(const Vec2 &a, const Vec2 &b);
+bool test_equal(const Vec2 &a, const Vec2 &b);
+bool test_equal_precise(const Vec2 &a, const Vec2 &b);
 } // namespace vec2
 
 struct Line2 {
@@ -61,10 +40,10 @@ struct Line2 {
 };
 
 namespace line2 {
-Vec2 line2_project_point(const Vec2 &P);
-bool line2_test_point_within_seg_bounds(const Vec2 &point);
-double get_distance_point_to_ray(const Vec2 &plane_point);
-double get_distance_point_to_seg(const Vec2 &plane_point);
+Vec2 project_point(const Line2 &line, const Vec2 &P);
+bool point_in_segment_bounds(const Line2 &line, const Vec2 &P);
+double get_distance_point_to_ray(const Line2 &line, const Vec2 &P);
+double get_distance_point_to_seg(const Line2 &line, const Vec2 &P);
 } // namespace line2
 
 struct Circle2 {
@@ -85,6 +64,8 @@ void set_exact_P(Circle2 &circle, const double &radius, const Vec2 &P);
 
 struct Arc2 {
 	Vec2 C{}, S{}, E{};
+	double S_angle{}, E_angle{};
+	bool clockwise = true;
 	Arc2() = default;
 	Arc2(const Vec2 C, const Vec2 S, const Vec2 E) : C{C}, S{S}, E{E} {}
 	double radius() const {
@@ -95,6 +76,7 @@ struct Arc2 {
 	}
 };
 namespace arc2 {
+bool angle_on_arc(const double &angle);
 } // namespace arc2
 
 namespace graphics {

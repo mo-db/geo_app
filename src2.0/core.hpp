@@ -2,6 +2,7 @@
 #pragma once
 #include <cmath>
 #include <cassert>
+#include <numbers>
 #include <vector>
 #include <SDL3/SDL.h>
 
