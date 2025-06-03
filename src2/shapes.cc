@@ -264,7 +264,7 @@ bool update_snap(const App &app, Shapes &shapes) {
 		double distance = vec2::distance(arc_shape.arc.C, app.input.mouse);
 		if (distance < arc_shape.arc.radius() + snap.distance &&
 				distance > arc_shape.arc.radius() - snap.distance) {
-			if (arc2::angle_on_arc(circle2::get_angle_of_point(
+			if (arc2::angle_on_arc(arc_shape.arc, circle2::get_angle_of_point(
 					arc_shape.arc.to_circle(), app.input.mouse))) {
 			snap.point = circle2::project_point(arc_shape.arc.to_circle(), app.input.mouse);
 			snap.shape = SnapShape::ARC;

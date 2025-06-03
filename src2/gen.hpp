@@ -1,3 +1,5 @@
+// gen.hpp
+#pragma once
 #include "core.hpp"
 #include "graphics.hpp"
 #include "app.hpp"
@@ -36,10 +38,10 @@ void toogle_hl_of_id_points(Shapes &shapes);
 void hl_id_points_gen_select(Shapes &shapes, int shape_id);
 void maybe_select(App &app, Shapes &shapes, GenShapes &gen_shapes);
 
-std::vector<double> line_relations(const App &app, const Shapes &shapes,
-                                   const GenLine &gen);
-std::vector<double> circle_relations(const App &app, const Shapes &shapes,
-                                     const GenCircle &gen);
-std::vector<double> arc_relations(const App &app, const Shapes &shapes,
-                                  const GenArc &gen);
+std::vector<double> line_relations(App &app, Shapes &shapes,
+                                   GenLine &gen);
+std::vector<double> circle_relations(App &app, Shapes &shapes,
+                                     GenCircle &gen);
+std::vector<double> arc_relations(App &app, Shapes &shapes,
+                                  GenArc &gen);
 } // namespace gen

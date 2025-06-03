@@ -64,7 +64,7 @@ double get_distance_point_to_seg(const Line2 &line, const Vec2 &P) {
 } // namespace line2
 
 namespace circle2 {
-double get_angle_of_point(Circle2 &circle, const Vec2 &P) {
+double get_angle_of_point(const Circle2 &circle, const Vec2 &P) {
 	Vec2 v = P - circle.C;
   double angle = -std::atan2(v.y, v.x); // because 0/0 is up left
 	if (angle < 0) { angle += 2 * std::numbers::pi; }
@@ -195,7 +195,7 @@ std::vector<Vec2> Arc2_Line2_intersect(const Arc2 &a, const Line2 &l) {
 	std::vector<Vec2> ixn_points = Line2_Circle2_intersect(l, a.to_circle());
 	for (auto iter = ixn_points.begin(); iter != ixn_points.end();) {
 		// careful with iterator erase and incrementing
-		if (!arc2::angle_on_arc(circle2::get_angle_of_point(a.to_circle(), *iter))) {
+		if (!arc2::angle_on_arc(a, circle2::get_angle_of_point(a.to_circle(), *iter))) {
 			iter = ixn_points.erase(iter);
 		} else {
 			iter++;
@@ -206,7 +206,7 @@ std::vector<Vec2> Arc2_Line2_intersect(const Arc2 &a, const Line2 &l) {
 std::vector<Vec2> Arc2_Circle2_intersect(const Arc2 &a, const Circle2 &c) {
 	std::vector<Vec2> ixn_points = Circle2_Circle2_intersect(c, a.to_circle());
 	for (auto iter = ixn_points.begin(); iter != ixn_points.end();) {
-		if (!arc2::angle_on_arc(circle2::get_angle_of_point(a.to_circle(), *iter))) {
+		if (!arc2::angle_on_arc(a, circle2::get_angle_of_point(a.to_circle(), *iter))) {
 			iter = ixn_points.erase(iter);
 		} else {
 			iter++;
@@ -218,7 +218,7 @@ std::vector<Vec2> Arc2_Arc2_intersect(const Arc2 &a1,	const Arc2 &a2) {
 	std::vector<Vec2> ixn_points =
 		Circle2_Circle2_intersect(a1.to_circle(), a2.to_circle());
 	for (auto iter = ixn_points.begin(); iter != ixn_points.end();) {
-		if (!arc2::angle_on_arc(circle2::get_angle_of_point(a1.to_circle(), *iter))) {
+		if (!arc2::angle_on_arc(a1, circle2::get_angle_of_point(a1.to_circle(), *iter))) {
 			iter = ixn_points.erase(iter);
 		} else {
 			iter++;

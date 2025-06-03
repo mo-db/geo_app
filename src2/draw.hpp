@@ -18,5 +18,5 @@ uint32_t get_color(const Shapes &shapes);
 void draw_line(App &app, uint32_t *pixel_buf, const Line2 &line, uint32_t color);
 void draw_circle(App &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t color);
 void draw_arc(App &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color);
-void draw_shapes(const App &app, const Shapes &shapes);
+void draw_shapes(App &app, Shapes &shapes);
 } // namespace draw

@@ -21,6 +21,10 @@ void update_nodes(App &app, Shapes &shapes);
 
 void check_for_changes(App &app, Shapes &shapes);
 
+void reset_frame_state(App &app) {
+	app.input.mouse_click = false;
+}
+
 int main() {
 	App app;
 	Shapes shapes;
@@ -29,8 +33,10 @@ int main() {
 		return 1;
 	}
 	while(app.context.keep_running) {
-		app::reset_frame_state(app);
+		reset_frame_state(app);
 		shapes.snap.in_distance = shapes::update_snap(app, shapes);
+
+		process_events(app, shapes, gen_shapes);
 
 		// update node points
 		if (shapes.recalculate) {

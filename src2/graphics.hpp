@@ -77,7 +77,7 @@ struct Arc2 {
 	}
 };
 namespace arc2 {
-bool angle_on_arc(const double &angle);
+bool angle_on_arc(const Arc2& arc, const double &angle);
 void set_S(Arc2 &arc, const double &radius, const Vec2 &P);
 } // namespace arc2
 

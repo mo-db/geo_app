@@ -5,7 +5,7 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES := main app graphics gen draw shapes serialize
+SRC_NAMES := main graphics gen draw shapes serialize
 SRC_DIR := src2
 OBJ_DIR := obj
 BIN_DIR := bin

@@ -44,7 +44,5 @@ struct App {
 };
 
 namespace app {
-void reset_frame_state(App &app) {
-	app.input.mouse_click = false;
-}
+
 } // namespace app
