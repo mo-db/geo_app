@@ -46,7 +46,6 @@ struct AppState {
 	void frame_reset() { 
 		mouse_click = false;
 	};
-
 };
 
 enum struct GenDirection {
@@ -838,6 +837,7 @@ void Shapes::construct(AppState &app, Vec2 const &pt) {
     case AppMode::LINE:      construct_line(app, pt);   break;
     case AppMode::CIRCLE:    construct_circle(app, pt); break;
     case AppMode::ARC:       construct_arc(app, pt);    break;
+		default:								 return;
   }
 }
 
@@ -1503,16 +1503,6 @@ void draw_circle(AppState &app, uint32_t *pixel_buf, const Circle2 &circle, uint
 	}
 }
 
-// // helper—assumes all angles normalized to [0,2π)
-// inline bool angle_in_range(double a, double start, double end) {
-//     if (end >= start) {
-//         return (a >= start && a <= end);
-//     } else {
-//         // wraps around 2π → 0
-//         return (a >= start || a <= end);
-//     }
-// }
-
 // chatgpt generated, there is a cleaner way for sure
 void draw_arc(AppState &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color) {
     double cx = arc.center.x;
@@ -1570,7 +1560,6 @@ void draw_arc(AppState &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t colo
     }
 }
 
-
 // in the shapes keyword i want to have lines or circles or other stuff
 void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 	auto t1 = std::chrono::high_resolution_clock::now();
@@ -1591,21 +1580,25 @@ void draw(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 			draw_arc(app, pixels_locked, arc, get_color(arc.flags));
 		}
 
-		// [draw circle around all intersetion points]
-		for (const auto &is_point : shapes.ixn_points) {
-			Vec2 rad_point = { is_point.p.x + 20, is_point.p.y };
-			draw_circle(app, pixels_locked, Circle2 {is_point.p, rad_point}, get_color(is_point.flags));
-		}
-		// [draw circle around all shape points]
-		for (const auto &shape_point : shapes.def_points) {
-			Vec2 rad_point = { shape_point.p.x + 20, shape_point.p.y };
-			draw_circle(app, pixels_locked, Circle2 {shape_point.p, rad_point}, get_color(shape_point.flags));
+		// draw circle around snap point
+		if (shapes.in_snap_distance) {
+			draw_circle(app, pixels_locked, Circle2{shapes.snap_point, 20.0}, graphics::fg_color);
 		}
 
-		// [draw circle around snap point]
-		if (shapes.in_snap_distance) {
-			Vec2 rad_point = { shapes.snap_point.x + 20, shapes.snap_point.y };
-			draw_circle(app, pixels_locked, Circle2 {shapes.snap_point, rad_point}, graphics::fg_color); 
+		// draw circle around highlighted ixn_points
+		for (const auto &ixn_point : shapes.ixn_points) {
+			if (ixn_point.flags.highlighted) {
+				draw_circle(app, pixels_locked, Circle2{ixn_point.p, 20.0},
+										get_color(ixn_point.flags));
+			}
+		}
+
+		// draw circle around highlighted def_points
+		for (const auto &def_point : shapes.def_points) {
+			if (def_point.flags.highlighted) {
+				draw_circle(app, pixels_locked, Circle2{def_point.p, 20.0},
+										get_color(def_point.flags));
+			}
 		}
 
 		// draw geo_selected shapes and points in specific color
