@@ -3,9 +3,6 @@
 Vec2 operator+(const Vec2 &a, const Vec2 &b) {
 	return {a.x + b.x, a.y + b.y};
 }
-Vec2 operator+(const Vec2 &a, const double d) {
-	return {a.x + d, a.y + d};
-}
 Vec2 operator-(const Vec2 &a, const Vec2 &b) {
 	return {a.x - b.x, a.y - b.y};
 }
@@ -35,10 +32,10 @@ bool equal_epsilon(const Vec2 &a, const Vec2 &b) {
 
 namespace line2 {
 Vec2 project_point(const Line2 &line, const Vec2 &P) {
-	Vec2 v = line.get_v();
-	Vec2 AP = P - line.A;
-	double t = vec2::dot(AP, v) / vec2::dot(v, v);
-	return line.A + v * t;
+	Vec2 a = line.get_a();
+	double k = ((line.A.x * a.x + line.A.y * a.y) -
+							(P.x * a.x + P.y * a.y)) / (a.x * a.x + a.y * a.y);
+	return k * a + P;
 }
 
 bool point_in_segment_bounds(const Line2 &line, const Vec2 &P) {
@@ -50,8 +47,7 @@ bool point_in_segment_bounds(const Line2 &line, const Vec2 &P) {
 double get_distance_point_to_ray(const Line2 &line, const Vec2 &P) {
 	Vec2 a = line.get_a();
 	return std::abs((a.x * P.x + a.y * P.y +
-									(-a.x * line.A.x - a.y * line.B.y)) /
-									std::sqrt(std::pow(a.x, 2.0) + std::pow(a.y, 2.0)));
+									(-a.x * line.A.x - a.y * line.A.y)) / a.mag());
 }
 double get_distance_point_to_seg(const Line2 &line, const Vec2 &P) {
   Vec2 projected_point = project_point(line, P);
@@ -120,6 +116,7 @@ std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2) {
   if (std::abs(denominator) < gk::epsilon) { return {}; }
   double k = numerator / denominator;
 	Vec2 ixn_point = l2.A + k * l2_v;
+
 
 	// return if point is in line segment bounds
   if (line2::point_in_segment_bounds(l1, ixn_point) &&

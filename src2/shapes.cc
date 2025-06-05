@@ -43,7 +43,7 @@ void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 				double ref_length = shapes.ref.value;
 				assert(ref_length >= 0);
 				Vec2 v_norm = Line2{line.geom.A, P}.get_v().norm();
-				line.geom.B = line.geom.B + v_norm.x * ref_length;
+				line.geom.B = line.geom.B + v_norm * ref_length;
 			} else {
 				line.geom.B = P;
 			}
@@ -58,7 +58,7 @@ void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 			double ref_length = shapes.ref.value;
 			assert(ref_length >= 0);
 			Vec2 v_norm = Line2{line.geom.A, P}.get_v().norm();
-			line.geom.B = line.geom.B + v_norm.x * ref_length;
+			line.geom.B = line.geom.B + v_norm * ref_length;
 		} else {
 			line.geom.B = P;
 		}
@@ -220,23 +220,22 @@ bool update_snap(const App &app, Shapes &shapes) {
 
 	for (size_t index = 0; index < shapes.lines.size(); index++) {
 		Line &line = shapes.lines[index];
+
 		if (line2::get_distance_point_to_seg(line.geom, app.input.mouse) < snap.distance) {
 			Vec2 projected_point = line2::project_point(line.geom, app.input.mouse);
-			double p1_distance = vec2::distance(app.input.mouse, line.geom.A);
-			double p2_distance = vec2::distance(app.input.mouse, line.geom.B);
 			if (line2::point_in_segment_bounds(line.geom, projected_point)) {
 				snap.point = projected_point;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
 				return true;
-			} else if (p1_distance < snap.distance) {
+			} else if (vec2::distance(app.input.mouse, line.geom.A) < snap.distance) {
 				snap.point = line.geom.A;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
 				return true;
-			} else if (p2_distance < snap.distance) {
+			} else if (vec2::distance(app.input.mouse, line.geom.B) < snap.distance) {
 				snap.point = line.geom.B;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
@@ -302,6 +301,7 @@ void maybe_append_node(std::vector<Node> &node_shapes, Vec2 &P,
 		if (point_concealed) {
 			node_shapes.back().concealed = true;
 		}
+		cout << "node added" << endl; // NOTE
   }
 }
 

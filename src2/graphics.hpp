@@ -3,7 +3,7 @@
 #include "core.hpp"
 
 struct Vec2 {
-  double x{0.0}, y{0.0};
+  double x{0.}, y{0.};
   Vec2() = default;
   Vec2(const double x, const double y) : x{x}, y{y} {}
   // magnitude
@@ -16,7 +16,6 @@ struct Vec2 {
 };
 
 Vec2 operator+(const Vec2 &a, const Vec2 &b);
-Vec2 operator+(const Vec2 &a, const double d);
 Vec2 operator-(const Vec2 &a, const Vec2 &b);
 Vec2 operator*(const Vec2 &v, double d);
 Vec2 operator*(double d, const Vec2 &v);

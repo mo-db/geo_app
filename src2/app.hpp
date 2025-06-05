@@ -14,7 +14,7 @@ struct AppVideo {
 };
 
 struct AppInput {
-  Vec2 mouse;
+  Vec2 mouse{};
   bool mouse_left_down = false;
   bool mouse_right_down = false;
   bool mouse_click = false;

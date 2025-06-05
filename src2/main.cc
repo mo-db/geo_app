@@ -25,6 +25,21 @@ void reset_frame_state(App &app) {
 	app.input.mouse_click = false;
 }
 
+void print_info(App &app, Shapes &shapes) {
+	std::cout << "Mouse at (" << app.input.mouse.x << "," << app.input.mouse.y << ")\n";
+	cout << "node snap: " << shapes.snap.enabled_for_node_shapes << endl;
+
+	if (shapes.lines.size() > 0) {
+		auto &line = shapes.lines[0];
+		Vec2 pp = line2::project_point(line.geom, app.input.mouse);
+		cout << "projected point at: " << pp.x << "," << pp.y << endl;
+		double seg_dist = line2::get_distance_point_to_seg(line.geom, app.input.mouse);
+		double ray_dist = line2::get_distance_point_to_ray(line.geom, app.input.mouse);
+		cout << "seg_dist: " << seg_dist << endl;
+		cout << "ray_dist: " << ray_dist << endl;
+	}
+}
+
 int main() {
 	App app;
 	Shapes shapes;
@@ -50,8 +65,13 @@ int main() {
 			shapes::construct(app, shapes, app.input.mouse);
 		}
 
+
+
 		switch (app.context.mode) {
 			case AppMode::NORMAL:
+				if (app.input.mouse_click) {
+					print_node_ids_on_click(shapes);
+				}
 				break;
 			case AppMode::LINE:
 				break;
@@ -113,12 +133,6 @@ int app_init(App &app) {
 	std::cout << "w_pixels: " << app.video.w_pixels << std::endl;
 	std::cout << "h_pixels: " << app.video.h_pixels << std::endl;
 
-	app.context.keep_running = true;
-
-  app.input.mouse.x = 0;
-  app.input.mouse.y = 0;
-  app.input.mouse_left_down = 0;
-  app.input.mouse_right_down = 0;
   return 1;
 }
 
@@ -137,6 +151,7 @@ void print_node_ids_on_click(Shapes &shapes) {
 					cout << endl;
 				}
 			}
+		} else if (shapes.snap.shape == SnapShape::DEF_POINT) {
 			for (auto &def_point : shapes.def_points) {
 				if (def_point.P.x == shapes.snap.point.x &&
 						def_point.P.y == shapes.snap.point.y) {
@@ -263,6 +278,12 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 						}
           }
           break;
+				case SDLK_N:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.context.mode = AppMode::NORMAL;
+          }
+					break;
 				case SDLK_A:
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
@@ -349,8 +370,7 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 					break;
 				case SDLK_P:
 					if (!event.key.repeat) {
-						cout << "MOUSE: " << app.input.mouse.x << ","
-								 << app.input.mouse.y << endl;
+						print_info(app, shapes);
 					}
 					break;
 			}
@@ -377,8 +397,9 @@ void update_nodes(Shapes &shapes) {
 	for (size_t i = 0; i < shapes.lines.size(); i++) {
 		Line &l1 = shapes.lines[i];
 		for (size_t j = i+1; j < shapes.lines.size(); j++) {
-			Line &l2 = shapes.lines[i];
+			Line &l2 = shapes.lines[j];
 			vector<Vec2> ixn_points = graphics::Line2_Line2_intersect(l1.geom, l2.geom);
+			cout << "wtf" << endl;
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
 			if (l1.concealed || l2.concealed) {
@@ -488,7 +509,7 @@ void update_nodes(Shapes &shapes) {
 			concealed = true;
 		}
 		shapes::maybe_append_node(shapes.def_points, line.geom.A, line.id, concealed);
-		shapes::maybe_append_node(shapes.def_points, line.geom.A, line.id, concealed);
+		shapes::maybe_append_node(shapes.def_points, line.geom.B, line.id, concealed);
 	}
 	for (auto &circle : shapes.circles) {
 		bool concealed = false;

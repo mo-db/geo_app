@@ -114,6 +114,18 @@ void draw_shapes(App &app, Shapes &shapes) {
 			}
 		}
 
+		// draw circle around  ixn_points
+		for (const auto &ixn_point : shapes.ixn_points) {
+			draw_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
+									get_color(shapes, ixn_point));
+		}
+
+		// draw circle around  def_points
+		for (const auto &def_point : shapes.def_points) {
+			draw_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
+									get_color(shapes, def_point));
+		}
+
 		// [draw the temporary shape from base to cursor live if in construction]
 		if (shapes.construct.shape == ConstructShape::LINE) {
 			draw_line(app, pixels_locked, shapes.construct.line.geom,
