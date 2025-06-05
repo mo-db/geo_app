@@ -7,9 +7,7 @@ struct Vec2 {
   Vec2() = default;
   Vec2(const double x, const double y) : x{x}, y{y} {}
   // magnitude
-  double mag() {
-		return std::sqrt(x * x + y * y);
-	}
+  double mag() { return std::sqrt(x * x + y * y); }
   // normalize
   Vec2 norm() {
     double m = mag();
@@ -33,10 +31,11 @@ bool equal_epsilon(const Vec2 &a, const Vec2 &b);
 struct Line2 {
 	Vec2 A{}, B{};
 	Line2() = default;
-	Line2(const Vec2 A) : A{A} {}
 	Line2(const Vec2 A, const Vec2 B) : A{A}, B{B} {}
 	Vec2 get_a() const { return Vec2 {B.y - A.y, -(B.x - A.x)}; }
 	Vec2 get_v() const { return Vec2 {B.x - A.x, B.y - A.y}; }
+	double length() const { return vec2::distance(A, B); }
+	Vec2 direction() const { return (B - A).norm(); }
 };
 
 namespace line2 {
@@ -51,9 +50,7 @@ struct Circle2 {
 	Circle2() = default;
 	Circle2(const Vec2 C, const Vec2 P) : C{C}, P{P} {}
 	Circle2(const Vec2 C, const double d) : C{C} { P = {C.x + d, C.y}; }
-	double radius() const {
-		return sqrt(pow((C.x - P.x), 2.0) + pow((C.y - P.y), 2.0));
-	}
+	double radius() const { return vec2::distance(C, P); }
 };
 
 namespace circle2 {
@@ -82,8 +79,6 @@ void set_S(Arc2 &arc, const double &radius, const Vec2 &P);
 } // namespace arc2
 
 namespace graphics {
-
-
 std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2);
 std::vector<Vec2> Line2_Circle2_intersect(const Line2 &l, const Circle2 &c);
 std::vector<Vec2> Circle2_Circle2_intersect(const Circle2 &c1, const Circle2 &c2);

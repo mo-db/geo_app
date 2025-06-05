@@ -119,7 +119,7 @@ std::vector<Vec2> Line2_Line2_intersect(const Line2 &l1, const Line2 &l2) {
 	double denominator = l1_a.x * l2_v.x + l1_a.y * l2_v.y;
   if (std::abs(denominator) < gk::epsilon) { return {}; }
   double k = numerator / denominator;
-  Vec2 ixn_point{l2.A.x + k * l2_v.x, l2.A.y + k * l2_v.y};
+	Vec2 ixn_point = l2.A + k * l2_v;
 
 	// return if point is in line segment bounds
   if (line2::point_in_segment_bounds(l1, ixn_point) &&
@@ -180,12 +180,10 @@ std::vector<Vec2> Circle2_Circle2_intersect(const Circle2 &c1,
 		Line2 center_center_line {c1.C, c2.C};
 		Vec2 v_normal = center_center_line.get_v().norm();
 		Vec2 a_normal = center_center_line.get_a().norm();
-		Vec2 meet_point = {c1.C.x + v_normal.x * meet_distance,
-											 c1.C.y + v_normal.y *meet_distance};
-		Vec2 ixn_point_1 = {meet_point.x + h * a_normal.x,
-												meet_point.y + h *a_normal.y};
-		Vec2 ixn_point_2 = {meet_point.x - h * a_normal.x,
-												meet_point.y - h *a_normal.y};
+		Vec2 meet_point = c1.C + v_normal * meet_distance;
+		Vec2 ixn_point_1 = meet_point + h * a_normal;
+		Vec2 ixn_point_2 = meet_point -h * a_normal;
+
 		return std::vector<Vec2> {ixn_point_1, ixn_point_2};
 	} else {
 		return std::vector<Vec2> {};

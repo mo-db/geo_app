@@ -6,18 +6,18 @@
 #include "shapes.hpp"
 
 struct GenLine {
-	LineShape line_shape;
+	Line line;
 	Vec2 start_point {};
 	Vec2 dir_point {};
 };
 struct GenCircle {
-	CircleShape circle_shape;
+	Circle circle;
 	Vec2 start_point {};
 	Vec2 dir_point {};
 };
 
 struct GenArc {
-	ArcShape arc_shape;
+	Arc arc;
 	Vec2 start_point {};
 	Vec2 dir_point {};
 };
@@ -28,7 +28,7 @@ struct GenShapes {
 	std::vector<GenArc> arcs;
 
 	bool start_set = false;
-	NodeShape start_node {};
+	Node start_node {};
 	std::vector<int> start_node_ids {};
 };
 

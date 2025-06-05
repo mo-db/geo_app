@@ -83,14 +83,14 @@ void draw_shapes(App &app, Shapes &shapes) {
 		std::fill_n((uint32_t*)pixels, app.video.w_pixels * app.video.h_pixels, bg_color);
 
 		// [draw all finished shapes]
-		for (const auto &line_shape : shapes.lines) {
-			draw_line(app, pixels_locked, line_shape.line, get_color(shapes, line_shape));
+		for (const auto &line: shapes.lines) {
+			draw_line(app, pixels_locked, line.geom, get_color(shapes, line));
 		}
-		for (const auto &circle_shape : shapes.circles) {
-			draw_circle(app, pixels_locked, circle_shape.circle, get_color(shapes, circle_shape));
+		for (const auto &circle: shapes.circles) {
+			draw_circle(app, pixels_locked, circle.geom, get_color(shapes, circle));
 		}
-		for (const auto &arc_shape : shapes.arcs) {
-			draw_arc(app, pixels_locked, arc_shape.arc, get_color(shapes, arc_shape));
+		for (const auto &arc: shapes.arcs) {
+			draw_arc(app, pixels_locked, arc.geom, get_color(shapes, arc));
 		}
 
 		// draw circle around snap point
@@ -101,7 +101,7 @@ void draw_shapes(App &app, Shapes &shapes) {
 		// draw circle around highlighted ixn_points
 		for (const auto &ixn_point : shapes.ixn_points) {
 			if (ixn_point.highlighted) {
-				draw_circle(app, pixels_locked, Circle2{ixn_point.P, 20.0},
+				draw_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
 										get_color(shapes, ixn_point));
 			}
 		}
@@ -109,29 +109,29 @@ void draw_shapes(App &app, Shapes &shapes) {
 		// draw circle around highlighted def_points
 		for (const auto &def_point : shapes.def_points) {
 			if (def_point.highlighted) {
-				draw_circle(app, pixels_locked, Circle2{def_point.P, 20.0},
+				draw_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
 										get_color(shapes, def_point));
 			}
 		}
 
 		// [draw the temporary shape from base to cursor live if in construction]
 		if (shapes.construct.shape == ConstructShape::LINE) {
-			draw_line(app, pixels_locked, shapes.construct.line_shape.line,
-								get_color(shapes, shapes.construct.line_shape));
+			draw_line(app, pixels_locked, shapes.construct.line.geom,
+								get_color(shapes, shapes.construct.line));
 		}
 		if (shapes.construct.shape == ConstructShape::CIRCLE) {
-			draw_circle(app, pixels_locked, shapes.construct.circle_shape.circle,
-					get_color(shapes, shapes.construct.circle_shape));
+			draw_circle(app, pixels_locked, shapes.construct.circle.geom,
+					get_color(shapes, shapes.construct.circle));
 		}
 		if (shapes.construct.shape == ConstructShape::ARC) {
 			if (shapes.construct.point_set == PointSet::FIRST) {
-				draw_arc(app, pixels_locked, shapes.construct.arc_shape.arc, 
-						get_color(shapes, shapes.construct.arc_shape));
+				draw_arc(app, pixels_locked, shapes.construct.arc.geom, 
+						get_color(shapes, shapes.construct.arc));
 			} else {
 				draw_line(app, pixels_locked, 
-									Line2{shapes.construct.arc_shape.arc.C,
-									shapes.construct.arc_shape.arc.S}, 
-									get_color(shapes, shapes.construct.arc_shape));
+									Line2{shapes.construct.arc.geom.C,
+									shapes.construct.arc.geom.S}, 
+									get_color(shapes, shapes.construct.arc));
 			}
 		}
 

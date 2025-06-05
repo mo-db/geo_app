@@ -13,34 +13,33 @@ struct Shape {
 	Shape(const int id) : id{id} {}
 };
 
-struct NodeShape : Shape {
+struct Node: Shape {
 	Vec2 P{};
 	std::vector<int> ids;
-	NodeShape() = default;
-	NodeShape(const int id, const Vec2 &P)
+	Node() = default;
+	Node(const int id, const Vec2 &P)
 		: Shape{id}, P{P} {}
 };
 
-struct LineShape : Shape {
-	Line2 line{};
-	LineShape() = default;
-  LineShape(int id, const Vec2 &A, const Vec2 &B)
-		: Shape{id}, line{A, B} {}
+struct Line: Shape {
+	Line2 geom{};
+	Line() = default;
+  Line(int id, const Vec2 &A, const Vec2 &B)
+		: Shape{id}, geom{A, B} {}
 };
 
-struct CircleShape : Shape {
-	Circle2 circle;
-	CircleShape() = default;
-  CircleShape(int id, const Vec2 &C, const Vec2 &P)
-		: Shape{id}, circle{C, P} {}
+struct Circle : Shape {
+	Circle2 geom;
+	Circle() = default;
+  Circle(int id, const Vec2 &C, const Vec2 &P)
+		: Shape{id}, geom{C, P} {}
 };
 
-struct ArcShape : Shape {
-	Arc2 arc;
-	ArcShape() = default;
-  ArcShape(int id, const Vec2 &C,
-					 const Vec2 &S, const Vec2 &E)
-		: Shape{id}, arc{C, S, E} {}
+struct Arc : Shape {
+	Arc2 geom;
+	Arc() = default;
+  Arc(int id, const Vec2 &C, const Vec2 &S, const Vec2 &E)
+		: Shape{id}, geom{C, S, E} {}
 };
 
 enum struct PointSet { NONE, FIRST, SECOND, };
@@ -50,9 +49,9 @@ struct Construct {
 	ConstructShape shape = ConstructShape::NONE;
 	PointSet point_set = PointSet::NONE;
 
-	LineShape line_shape {};
-	CircleShape circle_shape {};
-	ArcShape arc_shape {};
+	Line line {};
+	Circle circle {};
+	Arc arc {};
 
 	void clear() {
 		shape = ConstructShape::NONE;
@@ -65,9 +64,9 @@ enum struct EditShape { NONE, LINE, CIRCLE, ARC, };
 struct Edit {
 	EditShape shape = EditShape::NONE;
 	bool in_edit = false;
-	LineShape line {};
-	CircleShape circle {};
-	ArcShape arc {};
+	Line line {};
+	Circle circle {};
+	Arc arc {};
 };
 
 // can be selected in normal mode, used when modkey draw new shape
@@ -91,11 +90,11 @@ struct Snap {
 };
 
 struct Shapes {
-	std::vector<LineShape> lines;
-	std::vector<CircleShape> circles;
-	std::vector<ArcShape> arcs;
-	std::vector<NodeShape> ixn_points;
-	std::vector<NodeShape> def_points;
+	std::vector<Line> lines;
+	std::vector<Circle> circles;
+	std::vector<Arc> arcs;
+	std::vector<Node> ixn_points;
+	std::vector<Node> def_points;
 
 	uint32_t id_counter {};
 	bool quantity_change = false;
@@ -106,9 +105,9 @@ struct Shapes {
 	Ref ref;
 	Snap snap;
 
-	LineShape *get_line_by_id(const int id);
-	CircleShape *get_circle_by_id(const int id);
-	ArcShape *get_arc_by_id(const int id);
+	Line *get_line_by_id(const int id);
+	Circle *get_circle_by_id(const int id);
+	Arc *get_arc_by_id(const int id);
 };
 
 namespace shapes {
@@ -125,9 +124,8 @@ void construct_arc(const App &app, Shapes &shapes, const Vec2 &pt);
 } // namespace detail
 void construct(const App &app, Shapes &shapes, const Vec2 &point);
 
-// editing shapes TODO
-
-void clear_edit(const App &app, Shapes &shapes);
+// editing shapes
+void clear_edit(Shapes &shapes);
 namespace detail {
 void line_edit_update(const App &app, Shapes &shapes);
 void circle_edit_update(const App &app, Shapes &shapes);
@@ -142,6 +140,6 @@ void update_edit(const App &app, Shapes &shapes);
 
 // functions for snapping
 bool update_snap(const App &app, Shapes &shapes);
-void maybe_append_node(std::vector<NodeShape> &node_shapes, Vec2 &P,
+void maybe_append_node(std::vector<Node> &nodes, Vec2 &P,
                            int shape_id, bool point_concealed);
 } // namespace shapes

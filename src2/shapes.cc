@@ -1,6 +1,6 @@
 #include "shapes.hpp"
 
-LineShape *Shapes::get_line_by_id(const int id) {
+Line *Shapes::get_line_by_id(const int id) {
 	for (auto &line : lines) {
 		if (id == line.id) {
 			return &line;
@@ -8,7 +8,7 @@ LineShape *Shapes::get_line_by_id(const int id) {
 	}
 	return nullptr;
 }
-CircleShape *Shapes::get_circle_by_id(const int id) {
+Circle *Shapes::get_circle_by_id(const int id) {
 	for (auto &circle : circles) {
 		if (id == circle.id) {
 			return &circle;
@@ -16,7 +16,7 @@ CircleShape *Shapes::get_circle_by_id(const int id) {
 	}
 	return nullptr;
 }
-ArcShape *Shapes::get_arc_by_id(const int id) {
+Arc *Shapes::get_arc_by_id(const int id) {
 	for (auto &arc : arcs) {
 		if (id == arc.id) {
 			return &arc;
@@ -28,28 +28,28 @@ ArcShape *Shapes::get_arc_by_id(const int id) {
 namespace shapes {
 
 void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
-	auto &line_shape = shapes.construct.line_shape;
+	auto &line = shapes.construct.line;
 	auto &construct = shapes.construct;
 
 	if (app.input.mouse_click) {
 		if (construct.point_set == PointSet::NONE) {
 			construct.point_set = PointSet::FIRST;
 			construct.shape = ConstructShape::LINE;
-			line_shape.line.A = P;
-			line_shape.concealed  = construct.concealed;
+			line.geom.A = P;
+			line.concealed  = construct.concealed;
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
 			if (shapes.ref.shape == RefShape::LINE) {
 				double ref_length = shapes.ref.value;
 				assert(ref_length >= 0);
-				Vec2 v_norm = Line2{line_shape.line.A, P}.get_v().norm();
-				line_shape.line.B = line_shape.line.B + v_norm.x * ref_length;
+				Vec2 v_norm = Line2{line.geom.A, P}.get_v().norm();
+				line.geom.B = line.geom.B + v_norm.x * ref_length;
 			} else {
-				line_shape.line.B = P;
+				line.geom.B = P;
 			}
-			line_shape.concealed = construct.concealed;
-			line_shape.id = shapes.id_counter++;
-			shapes.lines.push_back(line_shape);
+			line.concealed = construct.concealed;
+			line.id = shapes.id_counter++;
+			shapes.lines.push_back(line);
 			shapes.quantity_change = true;
 			construct.clear();
 		}
@@ -57,12 +57,12 @@ void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 		if (shapes.ref.shape == RefShape::LINE) {
 			double ref_length = shapes.ref.value;
 			assert(ref_length >= 0);
-			Vec2 v_norm = Line2{line_shape.line.A, P}.get_v().norm();
-			line_shape.line.B = line_shape.line.B + v_norm.x * ref_length;
+			Vec2 v_norm = Line2{line.geom.A, P}.get_v().norm();
+			line.geom.B = line.geom.B + v_norm.x * ref_length;
 		} else {
-			line_shape.line.B = P;
+			line.geom.B = P;
 		}
-		line_shape.line.B = P;
+		line.geom.B = P;
 	}
 }
 
@@ -77,104 +77,104 @@ void set_P(Shapes &shapes, Circle2 &circle, const Vec2 &P) {
 }
 
 void construct_circle(const App &app, Shapes &shapes, const Vec2 &P) {
-	auto &circle_shape = shapes.construct.circle_shape;
+	auto &circle = shapes.construct.circle;
 	auto &construct = shapes.construct;
 
 	if (app.input.mouse_click) {
 		if (construct.point_set == PointSet::NONE) {
 			construct.point_set = PointSet::FIRST;
 			construct.shape = ConstructShape::CIRCLE;
-			circle_shape.circle.C = P;
-			circle_shape.concealed = construct.concealed;
+			circle.geom.C = P;
+			circle.concealed = construct.concealed;
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
-			set_P(shapes, circle_shape.circle, P);
+			set_P(shapes, circle.geom, P);
 
-			circle_shape.concealed = construct.concealed;
-			circle_shape.id = shapes.id_counter++;
-			shapes.circles.push_back(circle_shape);
+			circle.concealed = construct.concealed;
+			circle.id = shapes.id_counter++;
+			shapes.circles.push_back(circle);
 			shapes.quantity_change = true;
 			construct.clear();
 		}
 	} else if (shapes.construct.point_set == PointSet::FIRST) {
-		set_P(shapes, circle_shape.circle, P);
+		set_P(shapes, circle.geom, P);
 	}
 }
 
 // arc
-void set_snap_E(std::vector<Vec2> ixn_points, const App &app, ArcShape &arc_shape) {
+void set_snap_E(std::vector<Vec2> ixn_points, const App &app, Arc &arc) {
 	if (ixn_points.size() > 1) {
 		if (vec2::distance(ixn_points.at(0), app.input.mouse) < 
 				vec2::distance(ixn_points.at(1), app.input.mouse)) {
-			arc_shape.arc.E = ixn_points.at(0);
+			arc.geom.E = ixn_points.at(0);
 		} else {
-			arc_shape.arc.E = ixn_points.at(1);
+			arc.geom.E = ixn_points.at(1);
 		}
 	} else {
-		arc_shape.arc.E = ixn_points.back();
+		arc.geom.E = ixn_points.back();
 	} 
 }
 
-void set_E(const App &app, Shapes &shapes, ArcShape &arc_shape, const Vec2 &P) {
+void set_E(const App &app, Shapes &shapes, Arc &arc, const Vec2 &P) {
 	if (shapes.snap.in_distance && shapes.snap.is_node_shape) {
 		if (shapes.snap.shape == SnapShape::LINE) {
-			LineShape &line_shape = shapes.lines[shapes.snap.index];
-			std::vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(arc_shape.arc, line_shape.line);
-			set_snap_E(ixn_points, app, arc_shape);
+			Line &line = shapes.lines[shapes.snap.index];
+			std::vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(arc.geom, line.geom);
+			set_snap_E(ixn_points, app, arc);
 		} else if (shapes.snap.shape == SnapShape::CIRCLE) {
-			CircleShape &circle_shape = shapes.circles[shapes.snap.index];
-			std::vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(arc_shape.arc, circle_shape.circle);
-			set_snap_E(ixn_points, app, arc_shape);
+			Circle &circle = shapes.circles[shapes.snap.index];
+			std::vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(arc.geom, circle.geom);
+			set_snap_E(ixn_points, app, arc);
 		} else if (shapes.snap.shape == SnapShape::ARC) {
-			ArcShape &arc_shape_2 = shapes.arcs[shapes.snap.index];
-			std::vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(arc_shape.arc, arc_shape_2.arc);
-			set_snap_E(ixn_points, app, arc_shape);
+			Arc &arc_2 = shapes.arcs[shapes.snap.index];
+			std::vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(arc.geom, arc_2.geom);
+			set_snap_E(ixn_points, app, arc);
 		}
 	} else {
-		arc_shape.arc.E = circle2::project_point(arc_shape.arc.to_circle(), P);
+		arc.geom.E = circle2::project_point(arc.geom.to_circle(), P);
 	}
-	arc_shape.arc.E_angle =
-		circle2::get_angle_of_point(arc_shape.arc.to_circle(), arc_shape.arc.E);
+	arc.geom.E_angle =
+		circle2::get_angle_of_point(arc.geom.to_circle(), arc.geom.E);
 }
 
-void set_S(Shapes &shapes, ArcShape &arc_shape, const Vec2 &P) {
+void set_S(Shapes &shapes, Arc &arc, const Vec2 &P) {
 	if (shapes.ref.shape == RefShape::ARC) {
 		double ref_radius = shapes.ref.value;
 		assert(ref_radius >= 0);
-		arc2::set_S(arc_shape.arc, ref_radius, P);
+		arc2::set_S(arc.geom, ref_radius, P);
 	} else {
-		arc_shape.arc.S = P;
+		arc.geom.S = P;
 	}
-	arc_shape.arc.S_angle = 
-		circle2::get_angle_of_point(arc_shape.arc.to_circle(), arc_shape.arc.S);
+	arc.geom.S_angle = 
+		circle2::get_angle_of_point(arc.geom.to_circle(), arc.geom.S);
 }
 
 void construct_arc(const App &app, Shapes &shapes, Vec2 const &P) {
-	auto &arc_shape = shapes.construct.arc_shape;
+	auto &arc = shapes.construct.arc;
 	auto &construct = shapes.construct;
 
 	if (app.input.mouse_click) {
 		if (construct.point_set == PointSet::NONE) {
 			construct.point_set = PointSet::FIRST;
 			construct.shape = ConstructShape::ARC;
-			arc_shape.arc.C = P;
-			arc_shape.concealed = construct.concealed;
+			arc.geom.C = P;
+			arc.concealed = construct.concealed;
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
-			set_S(shapes, arc_shape, P);
+			set_S(shapes, arc, P);
 		} else if (shapes.construct.point_set == PointSet::SECOND) {
-			set_E(app, shapes, arc_shape, P);
-			arc_shape.concealed = construct.concealed;
-			arc_shape.id = shapes.id_counter++;
-			shapes.arcs.push_back(arc_shape);
+			set_E(app, shapes, arc, P);
+			arc.concealed = construct.concealed;
+			arc.id = shapes.id_counter++;
+			shapes.arcs.push_back(arc);
 			shapes.quantity_change = true;
 			construct.clear();
 		}
 	} else if (shapes.construct.point_set == PointSet::FIRST) {
-		set_S(shapes, arc_shape, P);
-		arc_shape.arc.S_angle = circle2::get_angle_of_point(arc_shape.arc.to_circle(), arc_shape.arc.S);
+		set_S(shapes, arc, P);
+		arc.geom.S_angle = circle2::get_angle_of_point(arc.geom.to_circle(), arc.geom.S);
 	} else if (shapes.construct.point_set == PointSet::SECOND) {
-		set_E(app, shapes, arc_shape, P);
+		set_E(app, shapes, arc, P);
 	}
 }
 
@@ -219,25 +219,25 @@ bool update_snap(const App &app, Shapes &shapes) {
 	}
 
 	for (size_t index = 0; index < shapes.lines.size(); index++) {
-		LineShape &line_shape = shapes.lines[index];
-		if (line2::get_distance_point_to_seg(line_shape.line, app.input.mouse) < snap.distance) {
-			Vec2 projected_point = line2::project_point(line_shape.line, app.input.mouse);
-			double p1_distance = vec2::distance(app.input.mouse, line_shape.line.A);
-			double p2_distance = vec2::distance(app.input.mouse, line_shape.line.B);
-			if (line2::point_in_segment_bounds(line_shape.line, projected_point)) {
+		Line &line = shapes.lines[index];
+		if (line2::get_distance_point_to_seg(line.geom, app.input.mouse) < snap.distance) {
+			Vec2 projected_point = line2::project_point(line.geom, app.input.mouse);
+			double p1_distance = vec2::distance(app.input.mouse, line.geom.A);
+			double p2_distance = vec2::distance(app.input.mouse, line.geom.B);
+			if (line2::point_in_segment_bounds(line.geom, projected_point)) {
 				snap.point = projected_point;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
 				return true;
 			} else if (p1_distance < snap.distance) {
-				snap.point = line_shape.line.A;
+				snap.point = line.geom.A;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
 				return true;
 			} else if (p2_distance < snap.distance) {
-				snap.point = line_shape.line.B;
+				snap.point = line.geom.B;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
@@ -247,11 +247,11 @@ bool update_snap(const App &app, Shapes &shapes) {
 	}
 
 	for (size_t index = 0; index < shapes.circles.size(); index++) {
-		CircleShape &circle_shape = shapes.circles[index];
-		double distance = vec2::distance(circle_shape.circle.C, app.input.mouse);
-		if (distance < circle_shape.circle.radius() + snap.distance &&
-				distance > circle_shape.circle.radius() - snap.distance) {
-			snap.point = circle2::project_point(circle_shape.circle, app.input.mouse);
+		Circle &circle = shapes.circles[index];
+		double distance = vec2::distance(circle.geom.C, app.input.mouse);
+		if (distance < circle.geom.radius() + snap.distance &&
+				distance > circle.geom.radius() - snap.distance) {
+			snap.point = circle2::project_point(circle.geom, app.input.mouse);
 			snap.shape = SnapShape::CIRCLE;
 			snap.is_node_shape = false;
 			snap.index = index;
@@ -260,13 +260,13 @@ bool update_snap(const App &app, Shapes &shapes) {
 	}
 
 	for (size_t index = 0; index < shapes.arcs.size(); index++) {
-		ArcShape &arc_shape = shapes.arcs[index];
-		double distance = vec2::distance(arc_shape.arc.C, app.input.mouse);
-		if (distance < arc_shape.arc.radius() + snap.distance &&
-				distance > arc_shape.arc.radius() - snap.distance) {
-			if (arc2::angle_on_arc(arc_shape.arc, circle2::get_angle_of_point(
-					arc_shape.arc.to_circle(), app.input.mouse))) {
-			snap.point = circle2::project_point(arc_shape.arc.to_circle(), app.input.mouse);
+		Arc &arc = shapes.arcs[index];
+		double distance = vec2::distance(arc.geom.C, app.input.mouse);
+		if (distance < arc.geom.radius() + snap.distance &&
+				distance > arc.geom.radius() - snap.distance) {
+			if (arc2::angle_on_arc(arc.geom, circle2::get_angle_of_point(
+					arc.geom.to_circle(), app.input.mouse))) {
+			snap.point = circle2::project_point(arc.geom.to_circle(), app.input.mouse);
 			snap.shape = SnapShape::ARC;
 			snap.is_node_shape = false;
 			snap.index = index;
@@ -277,7 +277,7 @@ bool update_snap(const App &app, Shapes &shapes) {
 	return false;
 }
 
-void maybe_append_node(std::vector<NodeShape> &node_shapes, Vec2 &P,
+void maybe_append_node(std::vector<Node> &node_shapes, Vec2 &P,
                            int shape_id, bool point_concealed) {
   bool point_dup = false;
   for (auto &node_shape: node_shapes) {
@@ -298,14 +298,14 @@ void maybe_append_node(std::vector<NodeShape> &node_shapes, Vec2 &P,
   }
 	if (!point_dup) {
 		// if new point push back and maybe flag as concealed
-		node_shapes.push_back(NodeShape{shape_id, P});
+		node_shapes.push_back(Node{shape_id, P});
 		if (point_concealed) {
 			node_shapes.back().concealed = true;
 		}
   }
 }
 
-void clear_edit(const App &app, Shapes &shapes) {
+void clear_edit(Shapes &shapes) {
 	if (shapes.edit.in_edit) {
 		if (shapes.edit.shape == EditShape::LINE) {
 			shapes.lines.push_back(shapes.edit.line);
@@ -322,15 +322,15 @@ void clear_edit(const App &app, Shapes &shapes) {
 void line_edit_update(const App &app, Shapes &shapes) {
 	Vec2 P{};
 	if (shapes.snap.in_distance) {
-		P = line2::project_point(shapes.edit.line.line, shapes.snap.point);
+		P = line2::project_point(shapes.edit.line.geom, shapes.snap.point);
 	} else {
-		P = line2::project_point(shapes.edit.line.line, app.input.mouse);
+		P = line2::project_point(shapes.edit.line.geom, app.input.mouse);
 	}
-	if (vec2::distance(shapes.edit.line.line.A, app.input.mouse) <
-			vec2::distance(shapes.edit.line.line.B, app.input.mouse)) {
-		shapes.edit.line.line.A = P;
+	if (vec2::distance(shapes.edit.line.geom.A, app.input.mouse) <
+			vec2::distance(shapes.edit.line.geom.B, app.input.mouse)) {
+		shapes.edit.line.geom.A = P;
 	} else {
-		shapes.edit.line.line.B = P;
+		shapes.edit.line.geom.B = P;
 	}
 }
 
@@ -371,13 +371,13 @@ void update_edit(const App &app, Shapes &shapes) {
 			}
 			if (shapes.edit.shape == EditShape::CIRCLE) {
 				circle_edit_update(app, shapes);
-				shapes.lines.push_back(shapes.edit.line);
+				shapes.circles.push_back(shapes.edit.circle);
 				shapes.quantity_change = true;
 				shapes.edit.in_edit = false;
 			}
 			if (shapes.edit.shape == EditShape::ARC) {
 				arc_edit_update(app, shapes);
-				shapes.lines.push_back(shapes.edit.line);
+				shapes.arcs.push_back(shapes.edit.arc);
 				shapes.quantity_change = true;
 				shapes.edit.in_edit = false;
 			}
