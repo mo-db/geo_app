@@ -70,6 +70,7 @@ int main() {
 		switch (app.context.mode) {
 			case AppMode::NORMAL:
 				if (app.input.mouse_click) {
+					shapes::update_ref(app, shapes);
 					print_node_ids_on_click(shapes);
 				}
 				break;

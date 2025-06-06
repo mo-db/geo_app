@@ -43,7 +43,7 @@ void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 				double ref_length = shapes.ref.value;
 				assert(ref_length >= 0);
 				Vec2 v_norm = Line2{line.geom.A, P}.get_v().norm();
-				line.geom.B = line.geom.B + v_norm * ref_length;
+				line.geom.B = line.geom.A + v_norm * ref_length;
 			} else {
 				line.geom.B = P;
 			}
@@ -305,6 +305,38 @@ void maybe_append_node(std::vector<Node> &node_shapes, Vec2 &P,
   }
 }
 
+void update_ref(App &app, Shapes &shapes) {
+	if (app.input.ctrl_set) {
+		if (shapes.snap.shape == SnapShape::LINE) {
+			if (shapes.ref.id == shapes.lines[shapes.snap.index].id) {
+				shapes.ref.shape = RefShape::NONE;
+			} else {
+				shapes.ref.shape = RefShape::LINE;
+				shapes.ref.value = shapes.lines[shapes.snap.index].geom.length();
+				shapes.ref.id = shapes.lines[shapes.snap.index].id;
+			}
+		}
+		if (shapes.snap.shape == SnapShape::CIRCLE) {
+			if (shapes.ref.id == shapes.circles[shapes.snap.index].id) {
+				shapes.ref.shape = RefShape::NONE;
+			} else {
+				shapes.ref.shape = RefShape::CIRCLE;
+				shapes.ref.value = shapes.circles[shapes.snap.index].geom.radius();
+				shapes.ref.id = shapes.circles[shapes.snap.index].id;
+			}
+		}
+		if (shapes.snap.shape == SnapShape::ARC) {
+			if (shapes.ref.id == shapes.arcs[shapes.snap.index].id) {
+				shapes.ref.shape = RefShape::NONE;
+			} else {
+				shapes.ref.shape = RefShape::ARC;
+				shapes.ref.value = shapes.arcs[shapes.snap.index].geom.radius();
+				shapes.ref.id = shapes.arcs[shapes.snap.index].id;
+			}
+		}
+	}
+}
+
 void clear_edit(Shapes &shapes) {
 	if (shapes.edit.in_edit) {
 		if (shapes.edit.shape == EditShape::LINE) {
@@ -347,14 +379,17 @@ void update_edit(const App &app, Shapes &shapes) {
 			if (shapes.snap.shape == SnapShape::LINE) {
 				shapes.edit.line = shapes.lines[shapes.snap.index];
 				shapes.edit.in_edit = true;
+				shapes.edit.shape = EditShape::LINE;
 				shapes.lines.erase(shapes.lines.begin() + shapes.snap.index);
 			} else if (shapes.snap.shape == SnapShape::CIRCLE) {
 				shapes.edit.circle = shapes.circles[shapes.snap.index];
 				shapes.edit.in_edit = true;
+				shapes.edit.shape = EditShape::CIRCLE;
 				shapes.circles.erase(shapes.circles.begin() + shapes.snap.index);
 			} else if (shapes.snap.shape == SnapShape::ARC) {
 				shapes.edit.arc = shapes.arcs[shapes.snap.index];
 				shapes.edit.in_edit = true;
+				shapes.edit.shape = EditShape::ARC;
 				shapes.arcs.erase(shapes.arcs.begin() + shapes.snap.index);
 			}
 		} else {

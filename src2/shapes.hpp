@@ -64,6 +64,7 @@ enum struct EditShape { NONE, LINE, CIRCLE, ARC, };
 struct Edit {
 	EditShape shape = EditShape::NONE;
 	bool in_edit = false;
+	int id {-1};
 	Line line {};
 	Circle circle {};
 	Arc arc {};
@@ -137,6 +138,7 @@ void update_edit(const App &app, Shapes &shapes);
 // if in snap and click with special key held 
 // copy (shape determined) parameter to ref_variable
 // on drawing check if id = ref_id -> change color
+void update_ref(App &app, Shapes &shapes);
 
 // functions for snapping
 bool update_snap(const App &app, Shapes &shapes);
