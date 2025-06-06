@@ -1,67 +1,91 @@
 #include "draw.hpp"
 namespace draw {
-// simple version, TODO: inplement Bresenham for better performance
-void draw_line(App &app, uint32_t *pixel_buf, const Line2 &line, uint32_t color) {
-	int x1 = SDL_lround(line.A.x);
-	int y1 = SDL_lround(line.A.y);
-	int x2 = SDL_lround(line.B.x);
-	int y2 = SDL_lround(line.B.y);
-	
-	double dx = x2 - x1;
-	double dy = y2 - y1; // (0|0) is top left, so y increases downwards
-
-	// Distinguish if steep or shallow slope
-	if (SDL_abs(dx) > SDL_abs(dy)) {
-		int x;
-		double y;
-		double m = dy/dx;
-		int step = ((x2 > x1) ? +1 : -1);
-		for (x = x1; x != x2; x += step) {
-			y = m * (double)(x - x1) + (double)y1;
-			if (x >= 0 && x < app.video.w_pixels && y >= 0 && y < app.video.h_pixels) {
-				pixel_buf[x + SDL_lround(y) * app.video.w_pixels] = color;
-			}
-		}
-	} else {
-		double x;
-		int y;
-		double m = dx/dy;
-		int step = ((y2 > y1) ? +1 : -1);
-		for (y = y1; y != y2; y += step) {
-			x = m * (double)(y - y1) + (double)x1;
-			if (x >= 0 && x < app.video.w_pixels && y >= 0 && y < app.video.h_pixels) {
-				pixel_buf[SDL_lround(x) + y * app.video.w_pixels] = color;
-			}
-		}
+// world to screen conversion
+void set_pixel(App &app, uint32_t *pixel_buf, int x, int y, uint32_t color) {
+	if (x >= 0 && y >= 0 && x < app.video.w_pixels && y < app.video.h_pixels) {
+		pixel_buf[x + y * app.video.w_pixels] = color;
 	}
 }
 
-// TODO: improve simple version for dy sides, TODO: Implement Bresenham
-void draw_circle(App &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t color) {
-	double radius = circle.radius();
-	for (int x = SDL_lround(circle.C.x - radius); 
-			 x < SDL_lround(circle.C.x + radius); x++) {
-		double val = SDL_pow((radius), 2.0) - SDL_pow((double)(x - circle.C.x), 2.0);
-		if (val < 0) {
-			val = 0.0;
-		}
-		double y_offset = SDL_sqrt(val);
-		int y_top = circle.C.y - SDL_lround(y_offset);
-		int y_bottom = circle.C.y + SDL_lround(y_offset);
+void plot_line(App& app, uint32_t *pixel_buf, const Line2 &line, uint32_t color) {
+	int x0 = std::round(line.A.x);
+	int y0 = std::round(line.A.y);
+	int x1 = std::round(line.B.x);
+	int y1 = std::round(line.B.y);
 
-		// Draw the top and bottom points of the circle's circumference:
-		if (x >= 0 && x < app.video.w_pixels) {
-				if (y_top >= 0 && y_top < app.video.h_pixels)
-						pixel_buf[x + y_top * app.video.w_pixels] = color;
-				if (y_bottom >= 0 && y_bottom < app.video.h_pixels)
-						pixel_buf[x + y_bottom * app.video.w_pixels] = color;
-		}
-	}
+  int dx = abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
+  int dy = -abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
+  int err = dx + dy, e2; /* error value e_xy */
+
+  for (;;) { /* loop */
+    set_pixel(app, pixel_buf, x0, y0, color);
+    e2 = 2 * err;
+    if (e2 >= dy) { /* e_xy+e_x > 0 */
+      if (x0 == x1)
+        break;
+      err += dy;
+      x0 += sx;
+    }
+    if (e2 <= dx) { /* e_xy+e_y < 0 */
+      if (y0 == y1)
+        break;
+      err += dx;
+      y0 += sy;
+    }
+  }
 }
 
-void draw_arc(App &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color) {
+double get_angle(Vec2 C, Vec2 P) {
+	Vec2 v = P - C;
+  double angle = -std::atan2(v.y, v.x); // because 0/0 is up left
+	if (angle < 0) { angle += 2 * std::numbers::pi; }
+	cout << "angle: " << angle << endl;
+	return angle;
 }
 
+void plot_arc(App &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color) {
+	int xm = std::round(arc.C.x);
+	int ym = std::round(arc.C.y);
+	int r = std::round(arc.radius());
+  int x = -r, y = 0, err = 2 - 2 * r; /* bottom left to top right */
+  do {
+		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm - x), static_cast<double>(ym + y)}))) {
+			set_pixel(app, pixel_buf, xm - x, ym + y, color); //   I. Quadrant +x +y
+		}
+		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm - y), static_cast<double>(ym - x)}))) {
+			set_pixel(app, pixel_buf, xm - y, ym - x, color); //  II. Quadrant -x +y
+		}
+		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm + x), static_cast<double>(ym - y)}))) {
+			set_pixel(app, pixel_buf, xm + x, ym - y, color); // III. Quadrant -x -y
+		}
+		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm + y), static_cast<double>(ym + x)}))) {
+			set_pixel(app, pixel_buf, xm + y, ym + x, color); //  IV. Quadrant +x -y
+		}
+    r = err;
+    if (r <= y)
+      err += ++y * 2 + 1; /* e_xy+e_y < 0 */
+    if (r > x || err > y) /* e_xy+e_x > 0 or no 2nd y-step */
+      err += ++x * 2 + 1; /* -> x-step now */
+  } while (x < 0);
+}
+
+void plot_circle(App &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t color) {
+	int xm = std::round(circle.C.x);
+	int ym = std::round(circle.C.y);
+	int r = std::round(circle.radius());
+  int x = -r, y = 0, err = 2 - 2 * r; /* bottom left to top right */
+  do {
+		set_pixel(app, pixel_buf, xm - x, ym + y, color); //   I. Quadrant +x +y
+		set_pixel(app, pixel_buf, xm - y, ym - x, color); //  II. Quadrant -x +y
+		set_pixel(app, pixel_buf, xm + x, ym - y, color); // III. Quadrant -x -y
+		set_pixel(app, pixel_buf, xm + y, ym + x, color); //  IV. Quadrant +x -y
+    r = err;
+    if (r <= y)
+      err += ++y * 2 + 1; /* e_xy+e_y < 0 */
+    if (r > x || err > y) /* e_xy+e_x > 0 or no 2nd y-step */
+      err += ++x * 2 + 1; /* -> x-step now */
+  } while (x < 0);
+}
 uint32_t get_color(const Shapes& shapes, const Shape &shape) {
 	if (shapes.ref.shape != RefShape::NONE && shape.id == shapes.ref.id) {
 		return ref_color;
@@ -84,24 +108,24 @@ void draw_shapes(App &app, Shapes &shapes) {
 
 		// [draw all finished shapes]
 		for (const auto &line: shapes.lines) {
-			draw_line(app, pixels_locked, line.geom, get_color(shapes, line));
+			plot_line(app, pixels_locked, line.geom, get_color(shapes, line));
 		}
 		for (const auto &circle: shapes.circles) {
-			draw_circle(app, pixels_locked, circle.geom, get_color(shapes, circle));
+			plot_circle(app, pixels_locked, circle.geom, get_color(shapes, circle));
 		}
 		for (const auto &arc: shapes.arcs) {
-			draw_arc(app, pixels_locked, arc.geom, get_color(shapes, arc));
+			plot_arc(app, pixels_locked, arc.geom, get_color(shapes, arc));
 		}
 
 		// draw circle around snap point
 		if (shapes.snap.shape != SnapShape::NONE) {
-			draw_circle(app, pixels_locked, Circle2{shapes.snap.point, shapes.snap.distance}, fg_color);
+			plot_circle(app, pixels_locked, Circle2{shapes.snap.point, shapes.snap.distance}, fg_color);
 		}
 
 		// draw circle around highlighted ixn_points
 		for (const auto &ixn_point : shapes.ixn_points) {
 			if (ixn_point.highlighted) {
-				draw_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
+				plot_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
 										get_color(shapes, ixn_point));
 			}
 		}
@@ -109,38 +133,38 @@ void draw_shapes(App &app, Shapes &shapes) {
 		// draw circle around highlighted def_points
 		for (const auto &def_point : shapes.def_points) {
 			if (def_point.highlighted) {
-				draw_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
+				plot_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
 										get_color(shapes, def_point));
 			}
 		}
 
 		// draw circle around  ixn_points
 		for (const auto &ixn_point : shapes.ixn_points) {
-			draw_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
+			plot_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
 									get_color(shapes, ixn_point));
 		}
 
 		// draw circle around  def_points
 		for (const auto &def_point : shapes.def_points) {
-			draw_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
+			plot_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
 									get_color(shapes, def_point));
 		}
 
 		// [draw the temporary shape from base to cursor live if in construction]
 		if (shapes.construct.shape == ConstructShape::LINE) {
-			draw_line(app, pixels_locked, shapes.construct.line.geom,
+			plot_line(app, pixels_locked, shapes.construct.line.geom,
 								get_color(shapes, shapes.construct.line));
 		}
 		if (shapes.construct.shape == ConstructShape::CIRCLE) {
-			draw_circle(app, pixels_locked, shapes.construct.circle.geom,
+			plot_circle(app, pixels_locked, shapes.construct.circle.geom,
 					get_color(shapes, shapes.construct.circle));
 		}
 		if (shapes.construct.shape == ConstructShape::ARC) {
-			if (shapes.construct.point_set == PointSet::FIRST) {
-				draw_arc(app, pixels_locked, shapes.construct.arc.geom, 
+			if (shapes.construct.point_set == PointSet::SECOND) {
+				plot_arc(app, pixels_locked, shapes.construct.arc.geom, 
 						get_color(shapes, shapes.construct.arc));
 			} else {
-				draw_line(app, pixels_locked, 
+				plot_line(app, pixels_locked, 
 									Line2{shapes.construct.arc.geom.C,
 									shapes.construct.arc.geom.S}, 
 									get_color(shapes, shapes.construct.arc));
@@ -149,7 +173,7 @@ void draw_shapes(App &app, Shapes &shapes) {
 
 		// [draw the edit shape from base to cursor live if in construction]
 		if (shapes.edit.shape == EditShape::LINE) {
-			draw_line(app, pixels_locked, shapes.edit.line.geom,
+			plot_line(app, pixels_locked, shapes.edit.line.geom,
 								get_color(shapes, shapes.construct.line));
 		}
 

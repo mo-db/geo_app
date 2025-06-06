@@ -162,6 +162,7 @@ void construct_arc(const App &app, Shapes &shapes, Vec2 const &P) {
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
 			set_S(shapes, arc, P);
+			arc.concealed = construct.concealed;
 		} else if (shapes.construct.point_set == PointSet::SECOND) {
 			set_E(app, shapes, arc, P);
 			arc.concealed = construct.concealed;
