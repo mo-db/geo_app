@@ -26,6 +26,23 @@ Arc *Shapes::get_arc_by_id(const int id) {
 }
 
 namespace shapes {
+void pop_selected(Shapes &shapes) {
+  shapes.lines.erase(
+      remove_if(shapes.lines.begin(), shapes.lines.end(),
+                [](const Line &line) { return line.tflags.selected; }),
+      shapes.lines.end());
+  shapes.circles.erase(
+      remove_if(shapes.circles.begin(), shapes.circles.end(),
+                [](const Circle &circle) { return circle.tflags.selected; }),
+      shapes.circles.end());
+  shapes.arcs.erase(
+      remove_if(shapes.arcs.begin(), shapes.arcs.end(),
+                [](const Arc &arc) { return arc.tflags.selected; }),
+      shapes.arcs.end());
+  shapes.quantity_change = true;
+}
+
+void pop_by_id(int id);
 
 void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 	auto &line = shapes.construct.line;
@@ -36,7 +53,7 @@ void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 			construct.point_set = PointSet::FIRST;
 			construct.shape = ConstructShape::LINE;
 			line.geom.A = P;
-			line.concealed  = construct.concealed;
+			line.pflags.concealed  = construct.concealed;
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
 			if (shapes.ref.shape == RefShape::LINE) {
@@ -47,7 +64,7 @@ void construct_line(const App &app, Shapes &shapes, const Vec2 &P) {
 			} else {
 				line.geom.B = P;
 			}
-			line.concealed = construct.concealed;
+			line.pflags.concealed = construct.concealed;
 			line.id = shapes.id_counter++;
 			shapes.lines.push_back(line);
 			shapes.quantity_change = true;
@@ -85,12 +102,12 @@ void construct_circle(const App &app, Shapes &shapes, const Vec2 &P) {
 			construct.point_set = PointSet::FIRST;
 			construct.shape = ConstructShape::CIRCLE;
 			circle.geom.C = P;
-			circle.concealed = construct.concealed;
+			circle.pflags.concealed = construct.concealed;
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
 			set_P(shapes, circle.geom, P);
 
-			circle.concealed = construct.concealed;
+			circle.pflags.concealed = construct.concealed;
 			circle.id = shapes.id_counter++;
 			shapes.circles.push_back(circle);
 			shapes.quantity_change = true;
@@ -158,14 +175,14 @@ void construct_arc(const App &app, Shapes &shapes, Vec2 const &P) {
 			construct.point_set = PointSet::FIRST;
 			construct.shape = ConstructShape::ARC;
 			arc.geom.C = P;
-			arc.concealed = construct.concealed;
+			arc.pflags.concealed = construct.concealed;
 		} else if (construct.point_set == PointSet::FIRST) {
 			construct.point_set = PointSet::SECOND;
 			set_S(shapes, arc, P);
-			arc.concealed = construct.concealed;
+			arc.pflags.concealed = construct.concealed;
 		} else if (shapes.construct.point_set == PointSet::SECOND) {
 			set_E(app, shapes, arc, P);
-			arc.concealed = construct.concealed;
+			arc.pflags.concealed = construct.concealed;
 			arc.id = shapes.id_counter++;
 			shapes.arcs.push_back(arc);
 			shapes.quantity_change = true;
@@ -192,6 +209,7 @@ void construct(const App &app, Shapes &shapes, Vec2 const &P) {
 bool update_snap(const App &app, Shapes &shapes) {
 	auto &snap = shapes.snap;
 	snap.index = -1;
+	snap.id = -1;
 	snap.point = {};
 	snap.in_distance = false;
 	snap.is_node_shape = false;
@@ -204,6 +222,7 @@ bool update_snap(const App &app, Shapes &shapes) {
 				snap.shape = SnapShape::IXN_POINT;
 				snap.is_node_shape = true;
 				snap.index = index;
+				snap.id = shapes.ixn_points[index].id;
 				return true;
 			}	
 		}
@@ -214,6 +233,7 @@ bool update_snap(const App &app, Shapes &shapes) {
 				snap.shape = SnapShape::DEF_POINT;
 				snap.is_node_shape = true;
 				snap.index = index;
+				snap.id = shapes.def_points[index].id;
 				return true;
 			}	
 		}
@@ -229,18 +249,21 @@ bool update_snap(const App &app, Shapes &shapes) {
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
+				snap.id = shapes.lines[index].id;
 				return true;
 			} else if (vec2::distance(app.input.mouse, line.geom.A) < snap.distance) {
 				snap.point = line.geom.A;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
+				snap.id = shapes.lines[index].id;
 				return true;
 			} else if (vec2::distance(app.input.mouse, line.geom.B) < snap.distance) {
 				snap.point = line.geom.B;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
+				snap.id = shapes.lines[index].id;
 				return true;
 			}
 		}
@@ -255,6 +278,7 @@ bool update_snap(const App &app, Shapes &shapes) {
 			snap.shape = SnapShape::CIRCLE;
 			snap.is_node_shape = false;
 			snap.index = index;
+			snap.id = shapes.circles[index].id;
 			return true;
 		}
 	}
@@ -270,6 +294,7 @@ bool update_snap(const App &app, Shapes &shapes) {
 			snap.shape = SnapShape::ARC;
 			snap.is_node_shape = false;
 			snap.index = index;
+			snap.id = shapes.arcs[index].id;
 			return true;
 			}
 		}
@@ -277,32 +302,34 @@ bool update_snap(const App &app, Shapes &shapes) {
 	return false;
 }
 
-void maybe_append_node(std::vector<Node> &node_shapes, Vec2 &P,
-                           int shape_id, bool point_concealed) {
+void maybe_append_node(std::vector<Node> &nodes, Vec2 &P,
+                           int shape_id, bool node_concealed) {
   bool point_dup = false;
-  for (auto &node_shape: node_shapes) {
-		if (vec2::equal_int_epsilon(node_shape.P, P)) {
+  for (auto &node : nodes) {
+		if (vec2::equal_int_epsilon(node.P, P)) {
       point_dup = true;
-      for (auto &id : node_shape.ids) {
+			// test if id allready in node
+      for (auto &id : node.ids) {
 				if (shape_id == id) {
 					return;
         }
       }
 			// add id to id point, maybe change conceal status of id point
-			if (node_shape.concealed && !point_concealed) {
-				node_shape.concealed = false;
+			if (node.pflags.concealed && !node_concealed) {
+				node.pflags.concealed = false;
 			}
-      node_shape.ids.push_back(shape_id);
+      node.ids.push_back(shape_id);
 			return;
     }
   }
 	if (!point_dup) {
-		// if new point push back and maybe flag as concealed
-		node_shapes.push_back(Node{shape_id, P});
-		if (point_concealed) {
-			node_shapes.back().concealed = true;
+		// create the node
+		nodes.push_back(Node{shape_id, P});
+		// push back the shape id
+		nodes.back().ids.push_back(shape_id);
+		if (node_concealed) {
+			nodes.back().pflags.concealed = true;
 		}
-		cout << "node added" << endl; // NOTE
   }
 }
 
@@ -431,4 +458,40 @@ void update_edit(const App &app, Shapes &shapes) {
 	}
 }
 
+void clear_tflags_global(Shapes &shapes) {
+	for (auto &ixn_point: shapes.ixn_points) { ixn_point.clear_tflags(); }
+	for (auto &def_point : shapes.def_points) { def_point.clear_tflags(); }
+	for (auto &line: shapes.lines) { line.clear_tflags(); }
+	for (auto &circle: shapes.circles) { circle.clear_tflags(); }
+	for (auto &arc: shapes.arcs) { arc.clear_tflags(); }
+}
+
+void clear_tflags_hl_primary_global(Shapes &shapes) {
+	for (auto &ixn_point: shapes.ixn_points) { ixn_point.tflags.hl_primary = false; }
+	for (auto &def_point : shapes.def_points) { def_point.tflags.hl_primary = false; }
+	for (auto &line: shapes.lines) { line.tflags.hl_primary = false; }
+	for (auto &circle: shapes.circles) { circle.tflags.hl_primary = false; }
+	for (auto &arc: shapes.arcs) { arc.tflags.hl_primary = false; }
+}
+
+void clear_tflags_hl_secondary_global(Shapes &shapes) {
+	for (auto &ixn_point: shapes.ixn_points) { ixn_point.tflags.hl_secondary = false; }
+	for (auto &def_point : shapes.def_points) { def_point.tflags.hl_secondary = false; }
+	for (auto &line: shapes.lines) { line.tflags.hl_secondary = false; }
+	for (auto &circle: shapes.circles) { circle.tflags.hl_secondary = false; }
+	for (auto &arc: shapes.arcs) { arc.tflags.hl_secondary = false; }
+}
+
+void clear_tflags_hl_tertiary_global(Shapes &shapes) {
+	for (auto &ixn_point: shapes.ixn_points) { ixn_point.tflags.hl_tertiary = false; }
+	for (auto &def_point : shapes.def_points) { def_point.tflags.hl_tertiary = false; }
+	for (auto &line: shapes.lines) { line.tflags.hl_tertiary = false; }
+	for (auto &circle: shapes.circles) { circle.tflags.hl_tertiary = false; }
+	for (auto &arc: shapes.arcs) { arc.tflags.hl_tertiary = false; }
+}
+
+bool id_match(const std::vector<int> &ids, const int shape_id) {
+  return std::any_of(ids.begin(), ids.end(),
+                     [shape_id](const int &id) { return shape_id == id; });
+}
 } // namespace shapes

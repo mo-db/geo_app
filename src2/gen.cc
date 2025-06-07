@@ -1,106 +1,112 @@
 #include "gen.hpp"
 
 namespace gen {
-// if in Gen mode and ctrl click on id point -> toogle hl
-void toogle_hl_of_id_points(Shapes &shapes) {
-	// assert(shapes.snap_is_id_point);
-	// if (shapes.snap_shape == SnapShape::IXN_POINT) {
-	// 	bool &highlighted = shapes.ixn_points[shapes.snap_index].flags.highlighted;
-	// 	if (highlighted) {
-	// 		highlighted = false;
-	// 	} else {
-	// 		highlighted = true;
-	// 	}
-	// } else if (shapes.snap_shape == SnapShape::DEF_POINT) {
-	// 	bool &highlighted = shapes.def_points[shapes.snap_index].flags.highlighted;
-	// 	if (highlighted) {
-	// 		highlighted = false;
-	// 	} else {
-	// 		highlighted = true;
-	// 	}
-	// }
+
+
+void hl_nodes_of_shape(Shapes &shapes, int shape_id) {
+	for (auto &node : shapes.ixn_points) {
+		node.tflags.hl_secondary = shapes::id_match(node.ids, shape_id);
+	}
+	for (auto &node : shapes.def_points) {
+		node.tflags.hl_secondary = shapes::id_match(node.ids, shape_id);
+	}
 }
 
-void hl_id_points_gen_select(Shapes &shapes, int shape_id) {
-	// for (auto &ixn_point : shapes.ixn_points) {
-	// 	if (!ixn_point.flags.concealed) {
-	// 		for (auto &id : ixn_point.ids) {
-	// 			if (id == shape_id) {
-	// 				ixn_point.flags.highlighted = true;
-	// 				cout << "point highlighted" << endl;
-	// 				break;
-	// 			}
-	// 		}
-	// 	}
-	// }
+void hl_gen_shapes_and_nodes(Shapes &shapes, GenShapes &gen_shapes) {
+	for (auto &line : gen_shapes.lines) {
+		line.shape.tflags.hl_secondary = true;
+		hl_nodes_of_shape(shapes, line.shape.id);
+	}
+	for (auto &circle : gen_shapes.circles) {
+		circle.shape.tflags.hl_secondary = true;
+		hl_nodes_of_shape(shapes, circle.shape.id);
+	}
+	for (auto &arc : gen_shapes.arcs) {
+		arc.shape.tflags.hl_secondary = true;
+		hl_nodes_of_shape(shapes, arc.shape.id);
+	}
+}
 
-	// for (auto &id_point : shapes.def_points) {
-	// 	if (!id_point.flags.concealed) {
-	// 		for (auto &id : id_point.ids) {
-	// 			if (id == shape_id) {
-	// 				cout << "point highlighted" << endl;
-	// 				id_point.flags.highlighted = true;
-	// 				break;
-	// 			}
-	// 		}
-	// 	}
-	// }
+void reset(Shapes &shapes, GenShapes &gen_shapes) {
+	shapes.snap.enabled_for_node_shapes = true;
+	gen_shapes.origin_set = false;
+	shapes::clear_tflags_hl_primary_global(shapes);
+	hl_gen_shapes_and_nodes(shapes, gen_shapes);
+}
+
+void set_origin(Shapes &shapes, GenShapes &gen_shapes, Node &node) {
+	// point origin to the node
+	gen_shapes.origin = node;
+	gen_shapes.origin_set = true;
+	// disable snapping to nodes
+	shapes.snap.enabled_for_node_shapes = false;
+	// highlight all shapes that have their id in the origin node
+	for (auto &line : shapes.lines) {
+		line.tflags.hl_primary = shapes::id_match(gen_shapes.origin.ids, line.id);
+	}
+	for (auto &circle : shapes.circles) {
+		circle.tflags.hl_primary = shapes::id_match(gen_shapes.origin.ids, circle.id);
+	}
+	for (auto &arc : shapes.arcs) {
+		arc.tflags.hl_primary = shapes::id_match(gen_shapes.origin.ids, arc.id);
+	}
+	node.tflags.hl_primary = true;
 }
 
 // TODO implement arc gen select
-void maybe_select(App &app, Shapes &shapes, GenShapes &gen_shapes) {
-  // if (shapes.snap_is_id_point) {
-		// if (shapes.snap_shape == SnapShape::IXN_POINT) {
-				// shapes.gen_start_point_ids = shapes.ixn_points[shapes.snap_index].ids;
-		// } else if (shapes.snap_shape == SnapShape::DEF_POINT) {
-				// shapes.gen_start_point_ids = shapes.def_points[shapes.snap_index].ids;
-		// }
-		// shapes.gen_start_point = shapes.snap_point;
-		// shapes.gen_start_set = true;
-  // } else if (!shapes.snap_is_id_point && shapes.gen_start_set) {
-
-		// if (shapes.snap_shape == SnapShape::LINE) {
-			// Line2 line = shapes.lines[shapes.snap_index];
-			// for (auto &id : shapes.gen_start_point_ids) {
-				// if (line.id == id) {
-					// line.flags.highlighted = true;
-					// gen_shapes.lines.push_back(
-						// GenLine{line, shapes.gen_start_point, shapes.snap_point});
-					// hl_id_points_gen_select(shapes, line.id);
-					// gen_shapes.start_set = false;
-					// break;
-				// }
-			// }
-		// }
-
-		// if (shapes.snap_shape == SnapShape::CIRCLE) {
-			// Circle2 circle = shapes.circles[shapes.snap_index];
-			// for (auto & id : shapes.gen_start_point_ids) {
-				// if (circle.id == id) {
-					// circle.flags.highlighted = true;
-					// gen_shapes.circles.push_back(
-						// GenCircle{circle, shapes.gen_start_point, shapes.snap_point});
-					// hl_id_points_gen_select(shapes, circle.id);
-					// gen_shapes.start_set = false;
-					// break;
-				// }
-			// }
-		// }
-
-		// if (shapes.snap_shape == SnapShape::ARC) {
-			// Arc2 arc = shapes.arcs[shapes.snap_index];
-			// for (auto & id : shapes.gen_start_point_ids) {
-				// if (arc.id == id) {
-					// arc.flags.highlighted = true;
-					// gen_shapes.arcs.push_back(
-						// GenArc{arc, shapes.gen_start_point, shapes.snap_point});
-					// hl_id_points_gen_select(shapes, arc.id);
-					// gen_shapes.start_set = false;
-					// break;
-				// }
-			// }
-		// }
-  // }
+// first clear all hl, selection
+// in edit mode if strg_held, toggle concealed of shape
+// in draw mode press key to enable disable concealed drawing
+//
+// if origin set, disable snap to nodes
+// need two flags/colors one to hl origin
+// i need two selection colors?
+//
+// NOTE maybe change name to update select and handle deletion with ctrl
+void maybe_select(Shapes &shapes, GenShapes &gen_shapes) {
+	if (gen_shapes.origin_set) {
+		if (shapes::id_match(gen_shapes.origin.ids, shapes.snap.id)) {
+			if (shapes.snap.shape == SnapShape::LINE) {
+				cout << "line" << endl;
+				auto &line = shapes.lines[shapes.snap.index];
+				if (detail::shape_is_duplicate(gen_shapes.lines, line)) {
+					// do nothing
+				} else {
+					gen_shapes.lines.push_back(
+						GenLine{line, gen_shapes.origin.P, shapes.snap.point});
+					reset(shapes, gen_shapes);
+				}
+			} else if (shapes.snap.shape == SnapShape::CIRCLE) {
+				cout << "circle" << endl;
+				auto &circle = shapes.circles[shapes.snap.index];
+				if (detail::shape_is_duplicate(gen_shapes.circles, circle)) {
+					// do nothing
+				} else {
+					gen_shapes.circles.push_back(
+						GenCircle{circle, gen_shapes.origin.P, shapes.snap.point});
+					reset(shapes, gen_shapes);
+				}
+			} else if (shapes.snap.shape == SnapShape::ARC) {
+				cout << "arc" << endl;
+				auto &arc = shapes.arcs[shapes.snap.index];
+				if (detail::shape_is_duplicate(gen_shapes.arcs, arc)) {
+					// do nothing
+				} else {
+					gen_shapes.arcs.push_back(
+						GenArc{arc, gen_shapes.origin.P, shapes.snap.point});
+					reset(shapes, gen_shapes);
+				}
+			}
+		}
+	} else {
+		if (shapes.snap.shape == SnapShape::IXN_POINT) {
+			cout << "ixn" << endl;
+			set_origin(shapes, gen_shapes, shapes.ixn_points[shapes.snap.index]);
+		} else if (shapes.snap.shape == SnapShape::DEF_POINT) {
+			cout << "def" << endl;
+			set_origin(shapes, gen_shapes, shapes.def_points[shapes.snap.index]);
+		}
+	}
 }
 
 

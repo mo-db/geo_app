@@ -38,6 +38,8 @@ void print_info(App &app, Shapes &shapes) {
 		cout << "seg_dist: " << seg_dist << endl;
 		cout << "ray_dist: " << ray_dist << endl;
 	}
+	std::cout << "Snap ID: " << shapes.snap.id << std::endl;
+
 }
 
 int main() {
@@ -65,8 +67,6 @@ int main() {
 			shapes::construct(app, shapes, app.input.mouse);
 		}
 
-
-
 		switch (app.context.mode) {
 			case AppMode::NORMAL:
 				if (app.input.mouse_click) {
@@ -84,16 +84,13 @@ int main() {
 				shapes::update_edit(app, shapes);
 				break;
 			case AppMode::GEN:
-				// if (shapes.snap.in_distance && app.input.mouse_click) {
-				// 	gen::maybe_select(app, shapes, gen_shapes);
-				// 	if (shapes.snap.is_node_shape && app.input.ctrl_set == true) {
-				// 		gen::toogle_hl_of_id_points(shapes);
-				// 	}
-				// }
+				if (shapes.snap.in_distance && app.input.mouse_click) {
+					gen::maybe_select(shapes, gen_shapes);
+				}
 				break;
 		}
 
-		draw::draw_shapes(app, shapes);
+		draw::plot_shapes(app, shapes);
 		check_for_changes(app, shapes);
 		SDL_Delay(10);
 	}
@@ -141,46 +138,29 @@ int app_init(App &app) {
 void print_node_ids_on_click(Shapes &shapes) {
 	if (shapes.snap.in_distance) {
 		if (shapes.snap.shape == SnapShape::IXN_POINT) {
-			for (auto &ixn_point : shapes.ixn_points) {
-				if (ixn_point.P.x == shapes.snap.point.x &&
-						ixn_point.P.y == shapes.snap.point.y) {
-					cout << "IS Point: " << ixn_point.P.x << ", " << ixn_point.P.y << endl;
-					cout << "ids: " << endl;
-					for (auto &id : ixn_point.ids) {
-						cout << id << ", ";
-					}
-					cout << endl;
-				}
+			Node ixn_point = shapes.ixn_points[shapes.snap.index];
+			cout << "ixn_point: " << ixn_point.P.x << ", " << ixn_point.P.y << endl;
+			cout << "ids: " << endl;
+			for (auto &id : ixn_point.ids) {
+				cout << id << ", ";
 			}
+			cout << endl;
 		} else if (shapes.snap.shape == SnapShape::DEF_POINT) {
-			for (auto &def_point : shapes.def_points) {
-				if (def_point.P.x == shapes.snap.point.x &&
-						def_point.P.y == shapes.snap.point.y) {
-					cout << "SD Point: " << def_point.P.x << ", " << def_point.P.y << endl;
-					cout << "ids: " << endl;
-					for (auto &id : def_point.ids) {
-						cout << id << ", ";
-					}
-					cout << endl;
-				}
+			Node def_point = shapes.def_points[shapes.snap.index];
+			cout << "def_point: " << def_point.P.x << ", " << def_point.P.y << endl;
+			cout << "ids: " << endl;
+			for (auto &id : def_point.ids) {
+				cout << id << ", ";
 			}
+			cout << endl;
 		}
 	}
-}
-
-// TODO move to shapes
-void clear_hl(Shapes &shapes) {
-	for (auto &ixn_point: shapes.ixn_points) {ixn_point.highlighted = false;}
-	for (auto &def_point : shapes.def_points) {def_point.highlighted = false;}
-	for (auto &line: shapes.lines) {line.highlighted = false;}
-	for (auto &circle: shapes.circles) {circle.highlighted = false;}
-	for (auto &arc: shapes.arcs) {arc.highlighted = false;}
 }
 
 void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 	// for all modes
 	shapes.construct.clear();
-	clear_hl(shapes);
+	shapes::clear_tflags_global(shapes);
 	shapes.snap.enabled_for_node_shapes = true;
 
 	switch (app.context.mode) {
@@ -196,9 +176,7 @@ void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 			shapes::clear_edit(shapes);
 			break;
 		case AppMode::GEN:
-			gen_shapes.lines.clear();
-			gen_shapes.circles.clear();
-			gen_shapes.arcs.clear();
+			// gen::clear(shapes, gen_shapes);
 			break;
 	}
 }
@@ -238,7 +216,26 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 					break;
         case SDLK_ESCAPE:
           if (!event.key.repeat) {
-						mode_change_cleanup(app, shapes, gen_shapes);
+						switch (app.context.mode) {
+							case AppMode::NORMAL:
+								break;
+							case AppMode::LINE:
+								shapes.construct.clear();
+								break;
+							case AppMode::CIRCLE:
+								shapes.construct.clear();
+								break;
+							case AppMode::ARC:
+								shapes.construct.clear();
+								break;
+							case AppMode::EDIT:
+								shapes::clear_edit(shapes);
+								break;
+							case AppMode::GEN:
+								gen::reset(shapes, gen_shapes);
+								break;
+						}
+						// mode_change_cleanup(app, shapes, gen_shapes);
             // app.context.mode = AppMode::NORMAL;
           }
           break;
@@ -329,15 +326,7 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
           break;
 				case SDLK_BACKSPACE:
           if (!event.key.repeat) {
-						if (app.context.mode == AppMode::NORMAL) {
-							shapes.lines.erase(remove_if(shapes.lines.begin(), shapes.lines.end(),
-									[](const Line &line_shape){ return line_shape.selected; }), shapes.lines.end());
-							shapes.circles.erase(remove_if(shapes.circles.begin(), shapes.circles.end(),
-									[](const Circle &circle_shape){ return circle_shape.selected; }), shapes.circles.end());
-							shapes.arcs.erase(remove_if(shapes.arcs.begin(), shapes.arcs.end(),
-									[](const Arc &arc_shape){ return arc_shape.selected; }), shapes.arcs.end());
-							shapes.quantity_change = true;
-						}
+						shapes::pop_selected(shapes);
           }
           break;
 				case SDLK_Y:
@@ -400,13 +389,14 @@ void update_nodes(Shapes &shapes) {
 		for (size_t j = i+1; j < shapes.lines.size(); j++) {
 			Line &l2 = shapes.lines[j];
 			vector<Vec2> ixn_points = graphics::Line2_Line2_intersect(l1.geom, l2.geom);
-			cout << "wtf" << endl;
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
-			if (l1.concealed || l2.concealed) {
+			if (l1.pflags.concealed || l2.pflags.concealed) {
 				concealed = true;
 			}
 			for (auto &ixn_point : ixn_points) {
+				cout << "l1 id: " << l1.id << endl;
+				cout << "l2 id: " << l2.id << endl;
 				shapes::maybe_append_node(shapes.ixn_points,
 															ixn_point, l1.id, concealed);
 				shapes::maybe_append_node(shapes.ixn_points,
@@ -422,7 +412,7 @@ void update_nodes(Shapes &shapes) {
 			vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(l.geom, c.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
-			if (c.concealed || l.concealed) {
+			if (c.pflags.concealed || l.pflags.concealed) {
 				concealed = true;
 			}
 			for (auto &ixn_point : ixn_points) {
@@ -439,7 +429,7 @@ void update_nodes(Shapes &shapes) {
 			vector<Vec2> ixn_points = graphics::Circle2_Circle2_intersect(c1.geom, c2.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
-			if (c1.concealed || c2.concealed) {
+			if (c1.pflags.concealed || c2.pflags.concealed) {
 				concealed = true;
 			}
 			for (auto &ixn_point : ixn_points) {
@@ -457,7 +447,7 @@ void update_nodes(Shapes &shapes) {
 			vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(a.geom, l.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
-			if (a.concealed || l.concealed) {
+			if (a.pflags.concealed || l.pflags.concealed) {
 				concealed = true;
 			}
 			for (auto &ixn_point : ixn_points) {
@@ -475,7 +465,7 @@ void update_nodes(Shapes &shapes) {
 			vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(a.geom, c.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
-			if (a.concealed || c.concealed) {
+			if (a.pflags.concealed || c.pflags.concealed) {
 				concealed = true;
 			}
 			for (auto &ixn_point : ixn_points) {
@@ -493,7 +483,7 @@ void update_nodes(Shapes &shapes) {
 			vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(a1.geom, a2.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
-			if (a1.concealed || a2.concealed) {
+			if (a1.pflags.concealed || a2.pflags.concealed) {
 				concealed = true;
 			}
 			for (auto &ixn_point : ixn_points) {
@@ -506,7 +496,7 @@ void update_nodes(Shapes &shapes) {
 	// append shape-defining points
 	for (auto &line : shapes.lines) {
 		bool concealed = false;
-		if (line.concealed) {
+		if (line.pflags.concealed) {
 			concealed = true;
 		}
 		shapes::maybe_append_node(shapes.def_points, line.geom.A, line.id, concealed);
@@ -514,7 +504,7 @@ void update_nodes(Shapes &shapes) {
 	}
 	for (auto &circle : shapes.circles) {
 		bool concealed = false;
-		if (circle.concealed) {
+		if (circle.pflags.concealed) {
 			concealed = true;
 		}
 		shapes::maybe_append_node(shapes.def_points, circle.geom.C, circle.id, concealed);
@@ -522,7 +512,7 @@ void update_nodes(Shapes &shapes) {
 	}
 	for (auto &arc : shapes.arcs) {
 		bool concealed = false;
-		if (arc.concealed) {
+		if (arc.pflags.concealed) {
 			concealed = true;
 		}
 		shapes::maybe_append_node(shapes.def_points, arc.geom.C, arc.id, concealed);

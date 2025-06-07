@@ -4,28 +4,28 @@ namespace serialize {
 void detail::serialize_line(const Line &line, ofstream &save_out) {
 	save_out << line.geom.A.x << " " << line.geom.A.y << " " 
 			<< line.geom.B.x << " " << line.geom.B.y << " "
-			<< static_cast<int>(line.concealed) << " ";
+			<< static_cast<int>(line.pflags.concealed) << " ";
 }
 Line detail::deserialize_line(ifstream &save_in) {
 	Line line;
 	int concealed_int {};
 	save_in >> line.geom.A.x >> line.geom.A.y >> line.geom.B.x >> line.geom.B.y
 		 >> concealed_int;
-	line.concealed = static_cast<bool>(concealed_int);
+	line.pflags.concealed = static_cast<bool>(concealed_int);
 	return line;
 }
 
 void detail::serialize_circle(const Circle &circle, ofstream &save_out) {
 	save_out << circle.geom.C.x << " " << circle.geom.C.y << " "
 			<< circle.geom.P.x << " " << circle.geom.P.y << " "
-			<< static_cast<int>(circle.concealed) << " ";
+			<< static_cast<int>(circle.pflags.concealed) << " ";
 }
 Circle detail::deserialize_circle(ifstream &save_in) {
 	Circle circle;
 	int concealed_int {};
 	save_in >> circle.geom.C.x >> circle.geom.C.y
 		 >> circle.geom.P.x >> circle.geom.P.y >> concealed_int;
-	circle.concealed = static_cast<bool>(concealed_int);
+	circle.pflags.concealed = static_cast<bool>(concealed_int);
 	return circle;
 }
 
@@ -33,7 +33,7 @@ void detail::serialize_arc(const Arc &arc, ofstream &out) {
 	out << arc.geom.C.x << " " << arc.geom.C.y << " "
 			<< arc.geom.S.x << " " << arc.geom.S.y << " "
 			<< arc.geom.E.x << " " << arc.geom.E.y << " "
-			<< static_cast<int>(arc.concealed) << " ";
+			<< static_cast<int>(arc.pflags.concealed) << " ";
 }
 Arc detail::deserialize_arc(ifstream &in) {
 	Arc arc;
@@ -41,7 +41,7 @@ Arc detail::deserialize_arc(ifstream &in) {
 	in >> arc.geom.C.x >> arc.geom.C.y
 		 >> arc.geom.S.x >> arc.geom.S.y
 		 >> arc.geom.E.x >> arc.geom.E.y >> concealed_int;
-	arc.concealed = static_cast<bool>(concealed_int);
+	arc.pflags.concealed = static_cast<bool>(concealed_int);
 
 	arc.geom.S_angle =
 			circle2::get_angle_of_point(arc.geom.to_circle(), arc.geom.S);

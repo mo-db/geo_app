@@ -4,13 +4,42 @@
 #include "graphics.hpp"
 #include "app.hpp"
 
+// these flags can be reset when changing modes or pressing escape
+struct TemporaryFlags {
+	bool selected{false};
+	bool hl_primary{false};
+	bool hl_secondary{false};
+	bool hl_tertiary{false};
+};
+
+// these flags are guaranteed to be persitent when changing modes
+struct PersistentFlags {
+	bool concealed{false};
+};
+
 struct Shape {
 	int id{-1};
-	bool selected{false};
-	bool concealed{false};
-	bool highlighted{false};
+	TemporaryFlags tflags;
+	PersistentFlags pflags;
 	Shape() = default;
 	Shape(const int id) : id{id} {}
+	void clear_tflags() {
+		tflags.selected = false;
+		tflags.hl_primary = false;
+		tflags.hl_secondary = false;
+		tflags.hl_tertiary = false;
+	}
+	void clear_pflags() {
+		pflags.concealed = false;
+	}
+	void clear_hl() {
+		tflags.hl_primary = false;
+		tflags.hl_secondary = false;
+		tflags.hl_tertiary = false;
+	}
+	bool highlighted() {
+		return tflags.hl_primary || tflags.hl_secondary || tflags.hl_tertiary;
+	}
 };
 
 struct Node: Shape {
@@ -85,6 +114,7 @@ struct Snap {
 
 	Vec2 point;
 	int index {};
+	int id {-1};
 	bool is_node_shape = false;
 	bool in_distance = false;
 	SnapShape shape = SnapShape::NONE;
@@ -114,8 +144,8 @@ struct Shapes {
 namespace shapes {
 // shapes general
 
-void pop_selected(App &app);
-void pop_by_id(int id);
+void pop_selected(Shapes &shapes);
+// void pop_by_id(int id);
 
 // constructing shapes
 namespace detail {
@@ -144,4 +174,10 @@ void update_ref(App &app, Shapes &shapes);
 bool update_snap(const App &app, Shapes &shapes);
 void maybe_append_node(std::vector<Node> &nodes, Vec2 &P,
                            int shape_id, bool point_concealed);
+void clear_tflags_global(Shapes &shapes);
+void clear_tflags_hl_primary_global(Shapes &shapes);
+void clear_tflags_hl_secondary_global(Shapes &shapes);
+void clear_tflags_hl_tertiary_global(Shapes &shapes);
+
+bool id_match(const std::vector<int> &ids, const int shape_id);
 } // namespace shapes

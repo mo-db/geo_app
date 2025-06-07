@@ -6,17 +6,35 @@
 #include "shapes.hpp"
 
 namespace draw {
-constexpr uint32_t fg_color = 0x00000000;					//black
-constexpr uint32_t bg_color = 0x00FFFFFF;					//white
-constexpr uint32_t sel_color = 0x00FF0000;				//red
-constexpr uint32_t conceal_color = 0x00CCCCCC;		//grey
-constexpr uint32_t gen_color = 0x000000FF;				//blue
-constexpr uint32_t edit_color = 0x0000FF00;				//green
-constexpr uint32_t ref_color = 0x000000FF;				//blue
-																									//
+constexpr uint32_t white =		0x00000000;
+constexpr uint32_t black =		0x00FFFFFF;
+constexpr uint32_t grey =			0x00CCCCCC;
+
+constexpr uint32_t red =			0x00FF0000;
+constexpr uint32_t green =		0x0000FF00;
+constexpr uint32_t blue =			0x000000FF;
+
+constexpr uint32_t yellow =		0x00FFFF00;
+constexpr uint32_t magenta =	0x00FF00FF;
+constexpr uint32_t cyan =			0x0000FFFF;
+
+constexpr uint32_t fg_color = black;
+constexpr uint32_t bg_color = white;
+constexpr uint32_t conceal_color = grey;
+constexpr uint32_t select_color = red;
+
+constexpr uint32_t hl_primary_color = green;
+constexpr uint32_t hl_secondary_color = cyan;
+constexpr uint32_t hl_tertiary_color = magenta;
+
+constexpr uint32_t special_color = blue;
+
+namespace detail {
+void set_pixel(App &app, uint32_t *pixel_buf, int x, int y, uint32_t color);
+void plot_line(App &app, uint32_t *pixel_buf, const Line2 &line, uint32_t color);
+void plot_circle(App &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t color);
+void plot_arc(App &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color);
+} // namespace detail
+void plot_shapes(App &app, Shapes &shapes);
 uint32_t get_color(const Shapes &shapes);
-void draw_line(App &app, uint32_t *pixel_buf, const Line2 &line, uint32_t color);
-void draw_circle(App &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t color);
-void draw_arc(App &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color);
-void draw_shapes(App &app, Shapes &shapes);
 } // namespace draw

@@ -88,17 +88,24 @@ void plot_circle(App &app, uint32_t *pixel_buf, const Circle2 &circle, uint32_t 
 }
 uint32_t get_color(const Shapes& shapes, const Shape &shape) {
 	if (shapes.ref.shape != RefShape::NONE && shape.id == shapes.ref.id) {
-		return ref_color;
+		return special_color;
 	}
-	if (shape.selected) {
-		return sel_color; 
-	} else if (shape.concealed) {
+	// return color hirachical
+	if (shape.tflags.selected) {
+		return select_color; 
+	} else if (shape.tflags.hl_primary) {
+		return hl_primary_color;
+	} else if (shape.tflags.hl_secondary) {
+		return hl_secondary_color;
+	} else if (shape.tflags.hl_tertiary) {
+		return hl_tertiary_color;
+	} else if (shape.pflags.concealed) {
 		return conceal_color;
 	} else {
 		return fg_color;
 	}
 }
-void draw_shapes(App &app, Shapes &shapes) {
+void plot_shapes(App &app, Shapes &shapes) {
 	auto t1 = std::chrono::high_resolution_clock::now();
 	void *pixels;
 	int pitch;
@@ -120,22 +127,6 @@ void draw_shapes(App &app, Shapes &shapes) {
 		// draw circle around snap point
 		if (shapes.snap.shape != SnapShape::NONE) {
 			plot_circle(app, pixels_locked, Circle2{shapes.snap.point, shapes.snap.distance}, fg_color);
-		}
-
-		// draw circle around highlighted ixn_points
-		for (const auto &ixn_point : shapes.ixn_points) {
-			if (ixn_point.highlighted) {
-				plot_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
-										get_color(shapes, ixn_point));
-			}
-		}
-
-		// draw circle around highlighted def_points
-		for (const auto &def_point : shapes.def_points) {
-			if (def_point.highlighted) {
-				plot_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
-										get_color(shapes, def_point));
-			}
 		}
 
 		// draw circle around  ixn_points
