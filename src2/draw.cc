@@ -35,30 +35,22 @@ void plot_line(App& app, uint32_t *pixel_buf, const Line2 &line, uint32_t color)
   }
 }
 
-double get_angle(Vec2 C, Vec2 P) {
-	Vec2 v = P - C;
-  double angle = -std::atan2(v.y, v.x); // because 0/0 is up left
-	if (angle < 0) { angle += 2 * std::numbers::pi; }
-	cout << "angle: " << angle << endl;
-	return angle;
-}
-
 void plot_arc(App &app, uint32_t *pixel_buf, const Arc2 &arc, uint32_t color) {
 	int xm = std::round(arc.C.x);
 	int ym = std::round(arc.C.y);
 	int r = std::round(arc.radius());
   int x = -r, y = 0, err = 2 - 2 * r; /* bottom left to top right */
   do {
-		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm - x), static_cast<double>(ym + y)}))) {
+		if (arc2::angle_on_arc(arc, vec2::get_angle(arc.C, Vec2{static_cast<double>(xm - x), static_cast<double>(ym + y)}))) {
 			set_pixel(app, pixel_buf, xm - x, ym + y, color); //   I. Quadrant +x +y
 		}
-		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm - y), static_cast<double>(ym - x)}))) {
+		if (arc2::angle_on_arc(arc, vec2::get_angle(arc.C, Vec2{static_cast<double>(xm - y), static_cast<double>(ym - x)}))) {
 			set_pixel(app, pixel_buf, xm - y, ym - x, color); //  II. Quadrant -x +y
 		}
-		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm + x), static_cast<double>(ym - y)}))) {
+		if (arc2::angle_on_arc(arc, vec2::get_angle(arc.C, Vec2{static_cast<double>(xm + x), static_cast<double>(ym - y)}))) {
 			set_pixel(app, pixel_buf, xm + x, ym - y, color); // III. Quadrant -x -y
 		}
-		if (arc2::angle_on_arc(arc, get_angle(arc.C, Vec2{static_cast<double>(xm + y), static_cast<double>(ym + x)}))) {
+		if (arc2::angle_on_arc(arc, vec2::get_angle(arc.C, Vec2{static_cast<double>(xm + y), static_cast<double>(ym + x)}))) {
 			set_pixel(app, pixel_buf, xm + y, ym + x, color); //  IV. Quadrant +x -y
 		}
     r = err;

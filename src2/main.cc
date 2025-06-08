@@ -176,7 +176,7 @@ void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 			shapes::clear_edit(shapes);
 			break;
 		case AppMode::GEN:
-			// gen::clear(shapes, gen_shapes);
+			gen::clear(shapes, gen_shapes);
 			break;
 	}
 }
@@ -332,30 +332,7 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 				case SDLK_Y:
 					if (!event.key.repeat) {
 						std::ofstream outf{ "Sample.txt" };
-						vector<double> relations {};
-						vector<double> relations_merge {};
-
-						for (auto &gen : gen_shapes.circles) {
-							relations = gen::circle_relations(app, shapes, gen);
-							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
-						}
-
-						for (auto &gen: gen_shapes.lines) {
-							relations = gen::line_relations(app, shapes, gen);
-							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
-						}
-
-						for (auto &gen : gen_shapes.arcs) {
-							relations = gen::arc_relations(app, shapes, gen);
-							relations_merge.insert(relations_merge.end(), relations.begin(), relations.end());
-						}
-
-						cout << "Relations: " << endl;
-						for (auto &relation : relations_merge) {
-							cout << relation << ", ";
-							outf << relation << " ";
-						}
-						cout << endl;
+						gen::calculate_relations(shapes, gen_shapes, outf);
 					}
 					break;
 				case SDLK_P:

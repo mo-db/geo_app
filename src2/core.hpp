@@ -12,7 +12,13 @@
 
 using namespace std;
 
+namespace util {
+inline void toggle_bool(bool &b) {
+	b = b ? false : true;
+}
+} // namespace util
+
 namespace gk {
-	constexpr double epsilon = 1e-6;
-	constexpr double int_epsilon = 0.5;
+constexpr double epsilon = 1e-6;
+constexpr double int_epsilon = 0.5;
 } // namespace gk

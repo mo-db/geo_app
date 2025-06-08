@@ -29,6 +29,8 @@ struct GenShapes {
 
 	bool origin_set = false;
 	Node origin{};
+
+	std::vector<std::pair<ShapeType, size_t>> selection_order;
 };
 
 namespace gen {
@@ -47,14 +49,15 @@ void set_origin(Shapes &shapes, GenShapes &gen_shapes, Node &node);
 } // namespace detail
 void maybe_select(Shapes &shapes, GenShapes &gen_shapes);
 
-std::vector<double> line_relations(App &app, Shapes &shapes,
-                                   GenLine &gen);
-std::vector<double> circle_relations(App &app, Shapes &shapes,
-                                     GenCircle &gen);
-std::vector<double> arc_relations(App &app, Shapes &shapes,
-                                  GenArc &gen);
+std::vector<double> line_relations(Shapes &shapes, GenLine &gen);
+std::vector<double> circle_relations(Shapes &shapes, GenCircle &gen);
+std::vector<double> arc_relations(Shapes &shapes, GenArc &gen);
+
+void calculate_relations(Shapes &shapes, GenShapes &gen_shapes,
+                         std::ofstream &file_out);
+
 // reset origin and others
 void reset(Shapes &shapes, GenShapes &gen_shapes);
 // clear gen shapes
-// void clear(Shapes &shapes, GenShapes &gen_shapes);
+void clear(Shapes &shapes, GenShapes &gen_shapes);
 } // namespace gen

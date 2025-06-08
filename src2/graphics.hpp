@@ -25,6 +25,7 @@ double dot(const Vec2 &a, const Vec2 &b);
 double distance(const Vec2 &a, const Vec2 &b);
 bool equal_int_epsilon(const Vec2 &a, const Vec2 &b);
 bool equal_epsilon(const Vec2 &a, const Vec2 &b);
+double get_angle(Vec2 P, Vec2 Q); // get angle of v = Q - P
 } // namespace vec2
 
 struct Line2 {

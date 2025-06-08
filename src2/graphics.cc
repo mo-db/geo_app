@@ -28,6 +28,12 @@ bool equal_epsilon(const Vec2 &a, const Vec2 &b) {
   return std::abs(a.x - b.x) < gk::epsilon &&
 				 std::abs(a.y - b.y) < gk::epsilon;
 }
+double get_angle(Vec2 P, Vec2 Q) {
+	Vec2 v = Q - P;
+  double angle = -std::atan2(v.y, v.x); // because 0/0 is up left
+	if (angle < 0) { angle += 2 * std::numbers::pi; }
+	return angle;
+}
 } // namespace vec2
 
 namespace line2 {

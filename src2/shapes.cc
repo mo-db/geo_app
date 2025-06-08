@@ -25,6 +25,19 @@ Arc *Shapes::get_arc_by_id(const int id) {
 	return nullptr;
 }
 
+Line &Shapes::get_line_by_index(const size_t index) {
+	assert(index <= lines.size());
+	return lines[index];
+}
+Circle &Shapes::get_circle_by_index(const size_t index) {
+	assert(index <= circles.size());
+	return circles[index];
+}
+Arc &Shapes::get_arc_by_index(const size_t index) {
+	assert(index <= arcs.size());
+	return arcs[index];
+}
+
 namespace shapes {
 void pop_selected(Shapes &shapes) {
   shapes.lines.erase(
@@ -118,34 +131,46 @@ void construct_circle(const App &app, Shapes &shapes, const Vec2 &P) {
 	}
 }
 
-// arc
+// arc NOTE use angle instead of distance to make better
 void set_snap_E(std::vector<Vec2> ixn_points, const App &app, Arc &arc) {
-	if (ixn_points.size() > 1) {
+	if (ixn_points.size() == 2) {
 		if (vec2::distance(ixn_points.at(0), app.input.mouse) < 
 				vec2::distance(ixn_points.at(1), app.input.mouse)) {
 			arc.geom.E = ixn_points.at(0);
 		} else {
 			arc.geom.E = ixn_points.at(1);
 		}
-	} else {
+	} else if (ixn_points.size() == 1) {
 		arc.geom.E = ixn_points.back();
-	} 
+	}
 }
 
 void set_E(const App &app, Shapes &shapes, Arc &arc, const Vec2 &P) {
-	if (shapes.snap.in_distance && shapes.snap.is_node_shape) {
+	if (shapes.snap.in_distance && !shapes.snap.is_node_shape) {
 		if (shapes.snap.shape == SnapShape::LINE) {
 			Line &line = shapes.lines[shapes.snap.index];
-			std::vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(arc.geom, line.geom);
-			set_snap_E(ixn_points, app, arc);
+			std::vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(line.geom, arc.geom.to_circle());
+			if (ixn_points.size() != 0) {
+				set_snap_E(ixn_points, app, arc);
+			} else {
+				arc.geom.E = circle2::project_point(arc.geom.to_circle(), P);
+			}
 		} else if (shapes.snap.shape == SnapShape::CIRCLE) {
 			Circle &circle = shapes.circles[shapes.snap.index];
-			std::vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(arc.geom, circle.geom);
-			set_snap_E(ixn_points, app, arc);
+			std::vector<Vec2> ixn_points = graphics::Circle2_Circle2_intersect(arc.geom.to_circle(), circle.geom);
+			if (ixn_points.size() != 0) {
+				set_snap_E(ixn_points, app, arc);
+			} else {
+				arc.geom.E = circle2::project_point(arc.geom.to_circle(), P);
+			}
 		} else if (shapes.snap.shape == SnapShape::ARC) {
 			Arc &arc_2 = shapes.arcs[shapes.snap.index];
-			std::vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(arc.geom, arc_2.geom);
-			set_snap_E(ixn_points, app, arc);
+			std::vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(arc_2.geom, arc.geom.to_circle());
+			if (ixn_points.size() != 0) {
+				set_snap_E(ixn_points, app, arc);
+			} else {
+				arc.geom.E = circle2::project_point(arc.geom.to_circle(), P);
+			}
 		}
 	} else {
 		arc.geom.E = circle2::project_point(arc.geom.to_circle(), P);
@@ -399,29 +424,47 @@ void circle_edit_update(const App &app, Shapes &shapes) {
 void arc_edit_update(const App &app, Shapes &shapes) {
 }
 
+
+
+
 // maybe automatically disable node snap for first selecting 
 // only works for lines at the moment
 void update_edit(const App &app, Shapes &shapes) {
 	if (!shapes.edit.in_edit) {
+		shapes.snap.enabled_for_node_shapes = false;
 		if (app.input.mouse_click) {
-			if (shapes.snap.shape == SnapShape::LINE) {
-				shapes.edit.line = shapes.lines[shapes.snap.index];
-				shapes.edit.in_edit = true;
-				shapes.edit.shape = EditShape::LINE;
-				shapes.lines.erase(shapes.lines.begin() + shapes.snap.index);
+				if (shapes.snap.shape == SnapShape::LINE) {
+				if (app.input.ctrl_set) {
+					util::toggle_bool(shapes.lines[shapes.snap.index].pflags.concealed);
+					shapes.quantity_change = true;
+				} else {
+					shapes.edit.line = shapes.lines[shapes.snap.index];
+					shapes.edit.in_edit = true;
+					shapes.edit.shape = EditShape::LINE;
+					shapes.lines.erase(shapes.lines.begin() + shapes.snap.index);
+				}
 			} else if (shapes.snap.shape == SnapShape::CIRCLE) {
-				shapes.edit.circle = shapes.circles[shapes.snap.index];
-				shapes.edit.in_edit = true;
-				shapes.edit.shape = EditShape::CIRCLE;
-				shapes.circles.erase(shapes.circles.begin() + shapes.snap.index);
+				if (app.input.ctrl_set) {
+					assert(shapes.snap.index <= shapes.circles.size());
+					util::toggle_bool(shapes.circles[shapes.snap.index].pflags.concealed);
+					shapes.quantity_change = true;
+				} else {
+					shapes.edit.circle = shapes.circles[shapes.snap.index];
+					shapes.edit.in_edit = true;
+					shapes.edit.shape = EditShape::CIRCLE;
+					shapes.circles.erase(shapes.circles.begin() + shapes.snap.index);
+				}
 			} else if (shapes.snap.shape == SnapShape::ARC) {
-				shapes.edit.arc = shapes.arcs[shapes.snap.index];
-				shapes.edit.in_edit = true;
-				shapes.edit.shape = EditShape::ARC;
-				shapes.arcs.erase(shapes.arcs.begin() + shapes.snap.index);
+				if (app.input.ctrl_set) {
+					util::toggle_bool(shapes.arcs[shapes.snap.index].pflags.concealed);
+					shapes.quantity_change = true;
+				} else {
+					shapes.edit.arc = shapes.arcs[shapes.snap.index];
+					shapes.edit.in_edit = true;
+					shapes.edit.shape = EditShape::ARC;
+					shapes.arcs.erase(shapes.arcs.begin() + shapes.snap.index);
+				}
 			}
-		} else {
-			shapes.snap.enabled_for_node_shapes = false;
 		}
 	} else {
 		shapes.snap.enabled_for_node_shapes = true;

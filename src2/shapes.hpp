@@ -17,6 +17,7 @@ struct PersistentFlags {
 	bool concealed{false};
 };
 
+enum struct ShapeType { NONE, IXN_POINT, DEF_POINT, LINE, CIRCLE, ARC };
 struct Shape {
 	int id{-1};
 	TemporaryFlags tflags;
@@ -113,7 +114,7 @@ struct Snap {
 	bool enabled_for_node_shapes = true;
 
 	Vec2 point;
-	int index {};
+	size_t index {};
 	int id {-1};
 	bool is_node_shape = false;
 	bool in_distance = false;
@@ -139,6 +140,10 @@ struct Shapes {
 	Line *get_line_by_id(const int id);
 	Circle *get_circle_by_id(const int id);
 	Arc *get_arc_by_id(const int id);
+
+	Line &get_line_by_index(const size_t index);
+	Circle &get_circle_by_index(const size_t index);
+	Arc &get_arc_by_index(const size_t index);
 };
 
 namespace shapes {
