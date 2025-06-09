@@ -1174,6 +1174,9 @@ void maybe_gen_select(AppState &app, Shapes &shapes, GenShapes &gen_shapes) {
 			Circle2 circle = shapes.circles[shapes.snap_index];
 			for (auto & id : shapes.gen_start_point_ids) {
 				if (circle.id == id) {
+					for (auto &gen_circle : gen_shapes.circles) {
+						bool duplicate = (gen_circle.id == circle.id) ? true : false;
+					}
 					circle.flags.highlighted = true;
 					gen_shapes.circles.push_back(
 						GenCircle{circle, shapes.gen_start_point, shapes.snap_point});

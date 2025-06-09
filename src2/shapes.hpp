@@ -110,15 +110,16 @@ struct Ref {
 
 enum struct SnapShape { NONE, IXN_POINT, DEF_POINT, LINE, CIRCLE, ARC, };
 struct Snap {
-	const double distance = 20.0; // why cant i do constexpr?
+	static constexpr double distance = 20.0;
 	bool enabled_for_node_shapes = true;
 
-	Vec2 point;
-	size_t index {};
+	static constexpr size_t index_unset = std::numeric_limits<size_t>::max();
+	size_t index {index_unset};
 	int id {-1};
 	bool is_node_shape = false;
 	bool in_distance = false;
 	SnapShape shape = SnapShape::NONE;
+	Vec2 point;
 };
 
 struct Shapes {
@@ -151,7 +152,8 @@ namespace shapes {
 
 void pop_selected(Shapes &shapes);
 // void pop_by_id(int id);
-
+void toggle_select(App &app, Shapes &shapes);
+void print_node_ids(Shapes &shapes);
 // constructing shapes
 namespace detail {
 void construct_line(const App &app, Shapes &shapes, const Vec2 &pt);
@@ -173,7 +175,7 @@ void update_edit(const App &app, Shapes &shapes);
 // if in snap and click with special key held 
 // copy (shape determined) parameter to ref_variable
 // on drawing check if id = ref_id -> change color
-void update_ref(App &app, Shapes &shapes);
+void maybe_select_ref(App &app, Shapes &shapes);
 
 // functions for snapping
 bool update_snap(const App &app, Shapes &shapes);

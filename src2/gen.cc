@@ -5,12 +5,12 @@ namespace gen {
 
 void hl_nodes_of_shape(Shapes &shapes, int shape_id) {
 	for (auto &node : shapes.ixn_points) {
-		if (shapes::id_match(node.ids, shape_id)) {
+		if (!node.pflags.concealed && shapes::id_match(node.ids, shape_id)) {
 			node.tflags.hl_secondary = true;
 		}
 	}
 	for (auto &node : shapes.def_points) {
-		if (shapes::id_match(node.ids, shape_id)) {
+		if (!node.pflags.concealed && shapes::id_match(node.ids, shape_id)) {
 			node.tflags.hl_secondary = true;
 		}
 	}

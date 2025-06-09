@@ -121,15 +121,17 @@ void plot_shapes(App &app, Shapes &shapes) {
 			plot_circle(app, pixels_locked, Circle2{shapes.snap.point, shapes.snap.distance}, fg_color);
 		}
 
-		// draw circle around  ixn_points
+		// draw circle around hl_secondary ixn_points
 		for (const auto &ixn_point : shapes.ixn_points) {
-			plot_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
-									get_color(shapes, ixn_point));
+			if (ixn_point.tflags.hl_secondary) {
+				plot_circle(app, pixels_locked, Circle2{ixn_point.P, shapes.snap.distance},
+										get_color(shapes, ixn_point));
+			}
 		}
 
 		// draw circle around  def_points
 		for (const auto &def_point : shapes.def_points) {
-			plot_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance},
+			plot_circle(app, pixels_locked, Circle2{def_point.P, shapes.snap.distance/3.0},
 									get_color(shapes, def_point));
 		}
 

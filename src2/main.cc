@@ -12,8 +12,6 @@ constexpr int gk_window_height = 1080/2;
 int app_init(App &app);
 
 // info
-void print_node_ids_on_click(Shapes &shapes);
-
 void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes);
 void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes);
 
@@ -70,8 +68,12 @@ int main() {
 		switch (app.context.mode) {
 			case AppMode::NORMAL:
 				if (app.input.mouse_click) {
-					shapes::update_ref(app, shapes);
-					print_node_ids_on_click(shapes);
+					if (app.input.ctrl_set) {
+						shapes::maybe_select_ref(app, shapes);
+					} else {
+						shapes::toggle_select(app, shapes);
+					}
+					shapes::print_node_ids(shapes);
 				}
 				break;
 			case AppMode::LINE:
@@ -92,7 +94,7 @@ int main() {
 
 		draw::plot_shapes(app, shapes);
 		check_for_changes(app, shapes);
-		SDL_Delay(10);
+		SDL_Delay(2);
 	}
 
 }
@@ -134,32 +136,8 @@ int app_init(App &app) {
   return 1;
 }
 
-// TODO move to shapes
-void print_node_ids_on_click(Shapes &shapes) {
-	if (shapes.snap.in_distance) {
-		if (shapes.snap.shape == SnapShape::IXN_POINT) {
-			Node ixn_point = shapes.ixn_points[shapes.snap.index];
-			cout << "ixn_point: " << ixn_point.P.x << ", " << ixn_point.P.y << endl;
-			cout << "ids: " << endl;
-			for (auto &id : ixn_point.ids) {
-				cout << id << ", ";
-			}
-			cout << endl;
-		} else if (shapes.snap.shape == SnapShape::DEF_POINT) {
-			Node def_point = shapes.def_points[shapes.snap.index];
-			cout << "def_point: " << def_point.P.x << ", " << def_point.P.y << endl;
-			cout << "ids: " << endl;
-			for (auto &id : def_point.ids) {
-				cout << id << ", ";
-			}
-			cout << endl;
-		}
-	}
-}
-
 void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 	// for all modes
-	shapes.construct.clear();
 	shapes::clear_tflags_global(shapes);
 	shapes.snap.enabled_for_node_shapes = true;
 
@@ -167,10 +145,13 @@ void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 		case AppMode::NORMAL:
 			break;
 		case AppMode::LINE:
+			shapes.construct.clear();
 			break;
 		case AppMode::CIRCLE:
+			shapes.construct.clear();
 			break;
 		case AppMode::ARC:
+			shapes.construct.clear();
 			break;
 		case AppMode::EDIT:
 			shapes::clear_edit(shapes);
@@ -218,6 +199,9 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
           if (!event.key.repeat) {
 						switch (app.context.mode) {
 							case AppMode::NORMAL:
+								shapes::clear_tflags_global(shapes);
+								shapes.ref.shape = RefShape::NONE;
+								shapes.ref.id = -1;
 								break;
 							case AppMode::LINE:
 								shapes.construct.clear();
@@ -235,11 +219,10 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 								gen::reset(shapes, gen_shapes);
 								break;
 						}
-						// mode_change_cleanup(app, shapes, gen_shapes);
-            // app.context.mode = AppMode::NORMAL;
           }
           break;
         case SDLK_K:
+					// NOTE this is bad here
           if (!event.key.repeat) {
 						if (app.context.mode == AppMode::ARC) {
 							if (shapes.construct.arc.geom.clockwise == true) {
@@ -251,6 +234,7 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
           }
           break;
         case SDLK_H:
+					// NOTE this si bad here
           if (!event.key.repeat) {
 						if (app.context.mode == AppMode::LINE ||
 								app.context.mode == AppMode::LINE ||
@@ -264,6 +248,7 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
           }
           break;
         case SDLK_U:
+					// NOTE this is bad here
           if (!event.key.repeat) {
 						if (app.context.mode == AppMode::LINE ||
 								app.context.mode == AppMode::LINE ||
@@ -362,9 +347,9 @@ void update_nodes(Shapes &shapes) {
 	shapes.def_points.clear();
 	// append line-line intersections
 	for (size_t i = 0; i < shapes.lines.size(); i++) {
-		Line &l1 = shapes.lines[i];
+		Line &l1 = shapes.get_line_by_index(i);
 		for (size_t j = i+1; j < shapes.lines.size(); j++) {
-			Line &l2 = shapes.lines[j];
+			Line &l2 = shapes.get_line_by_index(j);
 			vector<Vec2> ixn_points = graphics::Line2_Line2_intersect(l1.geom, l2.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
@@ -383,9 +368,9 @@ void update_nodes(Shapes &shapes) {
 	}
 	// append line-circle intersections
 	for (size_t i = 0; i < shapes.circles.size(); i++) {
-		Circle &c = shapes.circles.at(i);
+		Circle &c = shapes.get_circle_by_index(i);
 		for (size_t j = 0; j < shapes.lines.size(); j++) {
-			Line &l = shapes.lines.at(j);
+			Line &l = shapes.get_line_by_index(j);
 			vector<Vec2> ixn_points = graphics::Line2_Circle2_intersect(l.geom, c.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
@@ -400,9 +385,9 @@ void update_nodes(Shapes &shapes) {
 	}
 	// append circle-circle intersections
 	for (size_t i = 0; i < shapes.circles.size(); i++) {
-		Circle &c1 = shapes.circles.at(i);
+		Circle &c1 = shapes.get_circle_by_index(i);
 		for (size_t j = i+1; j < shapes.circles.size(); j++) {
-			Circle &c2 = shapes.circles.at(j);
+			Circle &c2 = shapes.get_circle_by_index(j);
 			vector<Vec2> ixn_points = graphics::Circle2_Circle2_intersect(c1.geom, c2.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
@@ -418,9 +403,9 @@ void update_nodes(Shapes &shapes) {
 
 	// append line-arc intersections
 	for (size_t i = 0; i < shapes.arcs.size(); i++) {
-		Arc &a = shapes.arcs.at(i);
+		Arc &a = shapes.get_arc_by_index(i);
 		for (size_t j = 0; j < shapes.lines.size(); j++) {
-			Line &l = shapes.lines.at(j);
+			Line &l = shapes.get_line_by_index(j);
 			vector<Vec2> ixn_points = graphics::Arc2_Line2_intersect(a.geom, l.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
@@ -436,9 +421,9 @@ void update_nodes(Shapes &shapes) {
 
 	// append arc-circle intersections
 	for (size_t i = 0; i < shapes.arcs.size(); i++) {
-		Arc &a = shapes.arcs.at(i);
+		Arc &a = shapes.get_arc_by_index(i);
 		for (size_t j = i+1; j < shapes.circles.size(); j++) {
-			Circle &c = shapes.circles.at(j);
+			Circle &c = shapes.get_circle_by_index(j);
 			vector<Vec2> ixn_points = graphics::Arc2_Circle2_intersect(a.geom, c.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
@@ -454,9 +439,9 @@ void update_nodes(Shapes &shapes) {
 
 	// append arc-arc intersections
 	for (size_t i = 0; i < shapes.arcs.size(); i++) {
-		Arc &a1 = shapes.arcs.at(i);
-		for (size_t j = i+1; j < shapes.circles.size(); j++) {
-			Arc &a2 = shapes.arcs.at(j);
+		Arc &a1 = shapes.get_arc_by_index(i);
+		for (size_t j = i+1; j < shapes.arcs.size(); j++) {
+			Arc &a2 = shapes.get_arc_by_index(j);
 			vector<Vec2> ixn_points = graphics::Arc2_Arc2_intersect(a1.geom, a2.geom);
 			// maybe change ixn_point status to concealed
 			bool concealed = false;
