@@ -96,8 +96,11 @@ struct Edit {
 	bool in_edit = false;
 	int id {-1};
 	Line line {};
+	Line line_backup {};
 	Circle circle {};
+	Circle circle_backup {};
 	Arc arc {};
+	Arc arc_backup {};
 };
 
 // can be selected in normal mode, used when modkey draw new shape
@@ -138,10 +141,19 @@ struct Shapes {
 	Ref ref;
 	Snap snap;
 
+	void push_ixn(Node ixn_point) { ixn_point.id = id_counter++; ixn_points.push_back(ixn_point); }
+	void push_def(Node def_point) { def_point.id = id_counter++;def_points.push_back(def_point); }
+	void push_line(Line line) { line.id = id_counter++; lines.push_back(line); }
+	void push_circle(Circle circle) { circle.id = id_counter++; circles.push_back(circle); }
+	void push_arc(Arc arc) { arc.id = id_counter++; arcs.push_back(arc); }
+
+	// TODO refactor, it's bad to return pointer to vector element, add nodes
 	Line *get_line_by_id(const int id);
 	Circle *get_circle_by_id(const int id);
 	Arc *get_arc_by_id(const int id);
 
+	Line &get_ixn_point_by_index(const size_t index); // TODO
+	Line &get_def_point_index(const size_t index); // TODO
 	Line &get_line_by_index(const size_t index);
 	Circle &get_circle_by_index(const size_t index);
 	Arc &get_arc_by_index(const size_t index);

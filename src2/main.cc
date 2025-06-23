@@ -49,7 +49,7 @@ int main() {
 	}
 	while(app.context.keep_running) {
 		reset_frame_state(app);
-		shapes.snap.in_distance = shapes::update_snap(app, shapes);
+		shapes::update_snap(app, shapes);
 
 		process_events(app, shapes, gen_shapes);
 
@@ -70,7 +70,7 @@ int main() {
 				if (app.input.mouse_click) {
 					if (app.input.ctrl_set) {
 						shapes::maybe_select_ref(app, shapes);
-					} else {
+					} else if (app.input.shift_set) {
 						shapes::toggle_select(app, shapes);
 					}
 					shapes::print_node_ids(shapes);
@@ -224,41 +224,19 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
         case SDLK_K:
 					// NOTE this is bad here
           if (!event.key.repeat) {
-						if (app.context.mode == AppMode::ARC) {
-							if (shapes.construct.arc.geom.clockwise == true) {
-								shapes.construct.arc.geom.clockwise = false;
-							} else {
-								shapes.construct.arc.geom.clockwise = true;
-							}
-						}
+						util::toggle_bool(shapes.construct.arc.geom.clockwise);
           }
           break;
         case SDLK_H:
-					// NOTE this si bad here
+					// NOTE this is bad here
           if (!event.key.repeat) {
-						if (app.context.mode == AppMode::LINE ||
-								app.context.mode == AppMode::LINE ||
-								app.context.mode == AppMode::ARC) {
-							if (shapes.construct.concealed == true) {
-								shapes.construct.concealed = false;
-							} else {
-								shapes.construct.concealed = true;
-							}
-						}
+						util::toggle_bool(shapes.construct.concealed);
           }
           break;
         case SDLK_U:
 					// NOTE this is bad here
           if (!event.key.repeat) {
-						if (app.context.mode == AppMode::LINE ||
-								app.context.mode == AppMode::LINE ||
-								app.context.mode == AppMode::ARC) {
-							if (shapes.snap.enabled_for_node_shapes == true) {
-								shapes.snap.enabled_for_node_shapes = false;
-							} else {
-								shapes.snap.enabled_for_node_shapes = true;
-							}
-						}
+						util::toggle_bool(shapes.snap.enabled_for_node_shapes);
           }
           break;
 				case SDLK_N:

@@ -50,6 +50,7 @@ Arc detail::deserialize_arc(ifstream &in) {
 	return arc;
 }
 
+// ultra simple, every line is a shapes vector
 void save_appstate(const Shapes &shapes, const std::string &save_file) {
 	std::ofstream save_out(save_file);
 	assert(save_out);
@@ -78,27 +79,28 @@ void save_appstate(const Shapes &shapes, const std::string &save_file) {
 void load_appstate(Shapes &shapes, const std::string &save_file) {
 	std::ifstream in(save_file);
 	assert(in);
+	shapes.id_counter = 0;
 	shapes.quantity_change = true;
 
 	shapes.lines.clear();
 	size_t n_lines;
 	in >> n_lines;
 	for (size_t i = 0; i < n_lines; i++) {
-	 shapes.lines.push_back(detail::deserialize_line(in));
+		shapes.push_line(detail::deserialize_line(in));
 	}
 
 	shapes.circles.clear();
 	size_t n_circles;
 	in >> n_circles;
 	for (size_t i = 0; i < n_circles; i++) {
-		shapes.circles.push_back(detail::deserialize_circle(in));
+		shapes.push_circle(detail::deserialize_circle(in));
 	}
 
 	shapes.arcs.clear();
 	size_t n_arcs;
 	in >> n_arcs;
 	for (size_t i = 0; i < n_arcs; i++) {
-		shapes.arcs.push_back(detail::deserialize_arc(in));
+		shapes.push_arc(detail::deserialize_arc(in));
 	}
 }
 } // namespace serialize

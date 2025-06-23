@@ -57,6 +57,12 @@ void print_node_ids(Shapes &shapes) {
 				cout << id << ", ";
 			}
 			cout << endl;
+		} else if (shapes.snap.shape == SnapShape::LINE) {
+			cout << "line id: " << shapes.get_line_by_index(shapes.snap.index).id << endl;
+		} else if (shapes.snap.shape == SnapShape::CIRCLE) {
+			cout << "circle id: " << shapes.get_circle_by_index(shapes.snap.index).id << endl;
+		} else if (shapes.snap.shape == SnapShape::ARC) {
+			cout << "arc id: " << shapes.get_arc_by_index(shapes.snap.index).id << endl;
 		}
 	}
 }
@@ -274,7 +280,9 @@ void construct(const App &app, Shapes &shapes, Vec2 const &P) {
   }
 }
 
+// NOTE need to select the closest snap point to cursor
 bool update_snap(const App &app, Shapes &shapes) {
+	double smallest_distance = 1000000.0; //make it double_max
 	auto &snap = shapes.snap;
 	snap.index = shapes.snap.index_unset;
 	snap.id = -1;
@@ -285,54 +293,72 @@ bool update_snap(const App &app, Shapes &shapes) {
 
 	if (snap.enabled_for_node_shapes) {
 		for (size_t index = 0; index < shapes.ixn_points.size(); index++) {
-			if (vec2::distance(shapes.ixn_points[index].P, app.input.mouse) < snap.distance) {
+			double distance = vec2::distance(shapes.ixn_points[index].P, app.input.mouse);
+			if (distance < snap.distance && distance < smallest_distance) {
+				smallest_distance = distance;
+				snap.in_distance = true;
 				snap.point = shapes.ixn_points[index].P;
 				snap.shape = SnapShape::IXN_POINT;
 				snap.is_node_shape = true;
 				snap.index = index;
 				snap.id = shapes.ixn_points[index].id;
-				return true;
 			}	
 		}
 
 		for (size_t index = 0; index < shapes.def_points.size(); index++) {
-			if (vec2::distance(shapes.def_points[index].P, app.input.mouse) < snap.distance) {
+			double distance = vec2::distance(shapes.def_points[index].P, app.input.mouse);
+			if (distance < snap.distance && distance < smallest_distance) {
+				smallest_distance = distance;
+				snap.in_distance = true;
 				snap.point = shapes.def_points[index].P;
 				snap.shape = SnapShape::DEF_POINT;
 				snap.is_node_shape = true;
 				snap.index = index;
 				snap.id = shapes.def_points[index].id;
-				return true;
 			}	
 		}
+		if (snap.in_distance) {
+			return true;
+		}
 	}
+	// maybe problem that smallest distance is overwritten?
 
 	for (size_t index = 0; index < shapes.lines.size(); index++) {
 		Line &line = shapes.lines[index];
-
-		if (line2::get_distance_point_to_seg(line.geom, app.input.mouse) < snap.distance) {
+		double distance = line2::get_distance_point_to_seg(line.geom, app.input.mouse);
+		if (distance < snap.distance && distance < smallest_distance) {
 			Vec2 projected_point = line2::project_point(line.geom, app.input.mouse);
 			if (line2::point_in_segment_bounds(line.geom, projected_point)) {
+				smallest_distance = distance;
+				snap.in_distance = true;
 				snap.point = projected_point;
 				snap.shape = SnapShape::LINE;
 				snap.is_node_shape = false;
 				snap.index = index;
 				snap.id = shapes.lines[index].id;
 				return true;
-			} else if (vec2::distance(app.input.mouse, line.geom.A) < snap.distance) {
-				snap.point = line.geom.A;
-				snap.shape = SnapShape::LINE;
-				snap.is_node_shape = false;
-				snap.index = index;
-				snap.id = shapes.lines[index].id;
-				return true;
-			} else if (vec2::distance(app.input.mouse, line.geom.B) < snap.distance) {
-				snap.point = line.geom.B;
-				snap.shape = SnapShape::LINE;
-				snap.is_node_shape = false;
-				snap.index = index;
-				snap.id = shapes.lines[index].id;
-				return true;
+			} else {
+				distance = vec2::distance(app.input.mouse, line.geom.A);
+				if (distance < snap.distance && distance < smallest_distance) {
+					smallest_distance = distance;
+					snap.in_distance = true;
+					snap.point = line.geom.A;
+					snap.shape = SnapShape::LINE;
+					snap.is_node_shape = false;
+					snap.index = index;
+					snap.id = shapes.lines[index].id;
+				} else {
+					distance = vec2::distance(app.input.mouse, line.geom.B);
+					if (distance < snap.distance && distance < smallest_distance) {
+						smallest_distance = distance;
+						snap.in_distance = true;
+						snap.point = line.geom.B;
+						snap.shape = SnapShape::LINE;
+						snap.is_node_shape = false;
+						snap.index = index;
+						snap.id = shapes.lines[index].id;
+					}
+				}
 			}
 		}
 	}
@@ -341,13 +367,14 @@ bool update_snap(const App &app, Shapes &shapes) {
 		Circle &circle = shapes.circles[index];
 		double distance = vec2::distance(circle.geom.C, app.input.mouse);
 		if (distance < circle.geom.radius() + snap.distance &&
-				distance > circle.geom.radius() - snap.distance) {
+				distance > circle.geom.radius() - snap.distance && distance < smallest_distance) {
+			smallest_distance = distance;
+			snap.in_distance = true;
 			snap.point = circle2::project_point(circle.geom, app.input.mouse);
 			snap.shape = SnapShape::CIRCLE;
 			snap.is_node_shape = false;
 			snap.index = index;
 			snap.id = shapes.circles[index].id;
-			return true;
 		}
 	}
 
@@ -355,19 +382,24 @@ bool update_snap(const App &app, Shapes &shapes) {
 		Arc &arc = shapes.arcs[index];
 		double distance = vec2::distance(arc.geom.C, app.input.mouse);
 		if (distance < arc.geom.radius() + snap.distance &&
-				distance > arc.geom.radius() - snap.distance) {
+				distance > arc.geom.radius() - snap.distance && distance < smallest_distance) {
 			if (arc2::angle_on_arc(arc.geom, circle2::get_angle_of_point(
 					arc.geom.to_circle(), app.input.mouse))) {
-			snap.point = circle2::project_point(arc.geom.to_circle(), app.input.mouse);
-			snap.shape = SnapShape::ARC;
-			snap.is_node_shape = false;
-			snap.index = index;
-			snap.id = shapes.arcs[index].id;
-			return true;
+				snap.in_distance = true;
+				smallest_distance = distance;
+				snap.point = circle2::project_point(arc.geom.to_circle(), app.input.mouse);
+				snap.shape = SnapShape::ARC;
+				snap.is_node_shape = false;
+				snap.index = index;
+				snap.id = shapes.arcs[index].id;
 			}
 		}
 	}
-	return false;
+	if (snap.in_distance) {
+		return true;
+	} else {
+		return false;
+	}
 }
 
 void maybe_append_node(std::vector<Node> &nodes, Vec2 &P,
@@ -436,7 +468,7 @@ void maybe_select_ref(App &app, Shapes &shapes) {
 	}
 }
 
-void clear_edit(Shapes &shapes) {
+void push_edit(Shapes &shapes) {
 	if (shapes.edit.in_edit) {
 		if (shapes.edit.shape == EditShape::LINE) {
 			shapes.lines.push_back(shapes.edit.line);
@@ -447,7 +479,21 @@ void clear_edit(Shapes &shapes) {
 		}
 	}
 	shapes.edit.in_edit = false;
-	shapes.snap.enabled_for_node_shapes = false;
+	shapes.quantity_change = true;
+}
+
+// NOTE i probably need copy backup and push this
+void clear_edit(Shapes &shapes) {
+	if (shapes.edit.in_edit) {
+		if (shapes.edit.shape == EditShape::LINE) {
+			shapes.lines.push_back(shapes.edit.line_backup);
+		} else if (shapes.edit.shape == EditShape::CIRCLE) {
+			shapes.circles.push_back(shapes.edit.circle_backup);
+		} else if (shapes.edit.shape == EditShape::ARC) {
+			shapes.arcs.push_back(shapes.edit.arc_backup);
+		}
+	}
+	shapes.edit.in_edit = false;
 }
 
 void line_edit_update(const App &app, Shapes &shapes) {
@@ -483,6 +529,7 @@ void update_edit(const App &app, Shapes &shapes) {
 					shapes.quantity_change = true;
 				} else {
 					shapes.edit.line = line;
+					shapes.edit.line_backup = line;
 					shapes.edit.in_edit = true;
 					shapes.edit.shape = EditShape::LINE;
 					shapes.lines.erase(shapes.lines.begin() + shapes.snap.index);
@@ -495,6 +542,7 @@ void update_edit(const App &app, Shapes &shapes) {
 					shapes.quantity_change = true;
 				} else {
 					shapes.edit.circle = circle;
+					shapes.edit.circle_backup = circle;
 					shapes.edit.in_edit = true;
 					shapes.edit.shape = EditShape::CIRCLE;
 					shapes.circles.erase(shapes.circles.begin() + shapes.snap.index);
@@ -506,6 +554,7 @@ void update_edit(const App &app, Shapes &shapes) {
 					shapes.quantity_change = true;
 				} else {
 					shapes.edit.arc = arc;
+					shapes.edit.arc_backup = arc;
 					shapes.edit.in_edit = true;
 					shapes.edit.shape = EditShape::ARC;
 					shapes.arcs.erase(shapes.arcs.begin() + shapes.snap.index);
@@ -517,21 +566,25 @@ void update_edit(const App &app, Shapes &shapes) {
 		if (app.input.mouse_click) {
 			if (shapes.edit.shape == EditShape::LINE) {
 				line_edit_update(app, shapes);
-				shapes.lines.push_back(shapes.edit.line);
-				shapes.quantity_change = true;
-				shapes.edit.in_edit = false;
+				cout << "line added back" << endl;
+				push_edit(shapes);
+				// shapes.lines.push_back(shapes.edit.line);
+				// shapes.quantity_change = true;
+				// shapes.edit.in_edit = false;
 			}
 			if (shapes.edit.shape == EditShape::CIRCLE) {
 				circle_edit_update(app, shapes);
-				shapes.circles.push_back(shapes.edit.circle);
-				shapes.quantity_change = true;
-				shapes.edit.in_edit = false;
+				push_edit(shapes);
+				// shapes.circles.push_back(shapes.edit.circle);
+				// shapes.quantity_change = true;
+				// shapes.edit.in_edit = false;
 			}
 			if (shapes.edit.shape == EditShape::ARC) {
 				arc_edit_update(app, shapes);
-				shapes.arcs.push_back(shapes.edit.arc);
-				shapes.quantity_change = true;
-				shapes.edit.in_edit = false;
+				push_edit(shapes);
+				// shapes.arcs.push_back(shapes.edit.arc);
+				// shapes.quantity_change = true;
+				// shapes.edit.in_edit = false;
 			}
 		} else {
 			if (shapes.edit.shape == EditShape::LINE) {
