@@ -162,9 +162,11 @@ void plot_shapes(App &app, Shapes &shapes) {
 		}
 
 		// [draw the edit shape from base to cursor live if in construction]
-		if (shapes.edit.shape == EditShape::LINE) {
-			plot_line(app, pixels_locked, shapes.edit.line.geom,
-								get_color(shapes, shapes.construct.line));
+		if (shapes.edit.in_edit) {
+			if (shapes.edit.shape == EditShape::LINE) {
+				plot_line(app, pixels_locked, shapes.edit.line.geom,
+									get_color(shapes, shapes.construct.line));
+			}
 		}
 
 		SDL_UnlockTexture(app.video.window_texture);

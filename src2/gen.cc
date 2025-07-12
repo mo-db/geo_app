@@ -120,40 +120,32 @@ void maybe_select(Shapes &shapes, GenShapes &gen_shapes) {
 }
 
 vector<double> line_relations(Shapes &shapes, GenLine &gen_line) {
+	// variables
 	auto &line = gen_line.shape;
-
 	vector<double> distances {};
 	vector<double> distance_relations {};
 
 	Vec2 A = gen_line.start_point;
 	Vec2 B {};
-	if (A.x == line.geom.A.x && A.y == line.geom.A.y) {
+	if (util::epsilon_equal(A.x, line.geom.A.x) &&
+			util::epsilon_equal(A.y, line.geom.A.y)) {
 		B = line.geom.B;
 	} else {
 		B = line.geom.A;
 	}
-
 	double max_distance = (vec2::distance(A, B));
 
-	// add distances between start_point and ixn_points to distances
+	// add distances between start_point and ixn_points to distances vector
 	for (auto &ixn_point : shapes.ixn_points) {
-		if (!ixn_point.pflags.concealed && std::any_of(ixn_point.ids.begin(), ixn_point.ids.end(),
+		if (!ixn_point.pflags.concealed &&
+				std::any_of(ixn_point.ids.begin(), ixn_point.ids.end(),
 										[&](const auto &id) { return id == line.id; })) {
-			distances.push_back(vec2::distance(A, ixn_point.P));
+			double distance = vec2::distance(A, ixn_point.P);
+			// filter out start and end point distances
+			if ((max_distance - distance) > gk::epsilon && distance > gk::epsilon) {
+				distances.push_back(vec2::distance(A, ixn_point.P));
+			}
 		}
-	}
-
-	// add 0.0 to distances if not allready inside 
-	auto iter = find_if(distances.begin(), distances.end(),
-			[](double distance){ return fabs(distance) < gk::epsilon; });
-	if (iter == distances.end()) {
-		distances.push_back(0.0);
-	}
-	// remove max_distance from distances if not allready inside
-	iter = find_if(distances.begin(), distances.end(),
-			[=](double d){ return fabs(d - max_distance) < gk::epsilon; });
-	if (iter != distances.end()) {
-		distances.erase(iter);
 	}
 
 	// sort distances ascending

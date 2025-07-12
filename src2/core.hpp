@@ -12,13 +12,18 @@
 
 using namespace std;
 
-namespace util {
-inline void toggle_bool(bool &b) {
-	b = b ? false : true;
-}
-} // namespace util
+
 
 namespace gk {
 constexpr double epsilon = 1e-6;
 constexpr double int_epsilon = 0.5;
 } // namespace gk
+
+namespace util {
+inline void toggle_bool(bool &b) {
+	b = b ? false : true;
+}
+inline bool epsilon_equal(double x, double y) {
+	return (x < y + gk::epsilon && x > y - gk::epsilon);
+}
+} // namespace util

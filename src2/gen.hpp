@@ -30,6 +30,7 @@ struct GenShapes {
 	bool origin_set = false;
 	Node origin{};
 
+	// pair of shape type and position in gen_shapes vector
 	std::vector<std::pair<ShapeType, size_t>> selection_order;
 };
 
