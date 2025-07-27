@@ -1,44 +1,26 @@
 #include "core.hpp"
 #include "app.hpp"
 #include "graphics.hpp"
-#include "draw.hpp"
+#include "rasterize.hpp"
 #include "shapes.hpp"
 #include "gen.hpp"
 #include "serialize.hpp"
+#include "debug.hpp"
 
+// this will be dynamic later, not constant
 constexpr const int gk_window_width = 1920/2;
 constexpr int gk_window_height = 1080/2;
 
 int app_init(App &app);
-
-// info
 void mode_change_cleanup(App &app, Shapes &shapes, GenShapes &gen_shapes);
 void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes);
-
 void update_nodes(Shapes &shapes);
-
 void check_for_changes(App &app, Shapes &shapes);
-
 void reset_frame_state(App &app) {
 	app.input.mouse_click = false;
 }
-
-void print_info(App &app, Shapes &shapes) {
-	std::cout << "Mouse at (" << app.input.mouse.x << "," << app.input.mouse.y << ")\n";
-	cout << "node snap: " << shapes.snap.enabled_for_node_shapes << endl;
-
-	if (shapes.lines.size() > 0) {
-		auto &line = shapes.lines[0];
-		Vec2 pp = line2::project_point(line.geom, app.input.mouse);
-		cout << "projected point at: " << pp.x << "," << pp.y << endl;
-		double seg_dist = line2::get_distance_point_to_seg(line.geom, app.input.mouse);
-		double ray_dist = line2::get_distance_point_to_ray(line.geom, app.input.mouse);
-		cout << "seg_dist: " << seg_dist << endl;
-		cout << "ray_dist: " << ray_dist << endl;
-	}
-	std::cout << "Snap ID: " << shapes.snap.id << std::endl;
-
-}
+uint32_t get_color(const Shapes& shapes, const Shape &shape);
+void draw(App &app, Shapes &shapes);
 
 int main() {
 	App app;
@@ -92,7 +74,7 @@ int main() {
 				break;
 		}
 
-		draw::plot_shapes(app, shapes);
+		draw(app, shapes);
 		check_for_changes(app, shapes);
 		SDL_Delay(2);
 	}
@@ -300,7 +282,7 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 					break;
 				case SDLK_P:
 					if (!event.key.repeat) {
-						print_info(app, shapes);
+						debug::info_print(app, shapes);
 					}
 					break;
 			}
@@ -459,6 +441,116 @@ void update_nodes(Shapes &shapes) {
 		shapes::maybe_append_node(shapes.def_points, arc.geom.S, arc.id, concealed);
 		shapes::maybe_append_node(shapes.def_points, arc.geom.E, arc.id, concealed);
 	}
+}
+
+uint32_t get_color(const Shapes& shapes, const Shape &shape) {
+	if (shapes.ref.shape != RefShape::NONE && shape.id == shapes.ref.id) {
+		return color::special;
+	}
+	// return color hirachical
+	if (shape.tflags.selected) {
+		return color::select; 
+	} else if (shape.tflags.hl_primary) {
+		return color::hl_primary;
+	} else if (shape.tflags.hl_secondary) {
+		return color::hl_secondary;
+	} else if (shape.tflags.hl_tertiary) {
+		return color::hl_tertiary;
+	} else if (shape.pflags.concealed) {
+		return color::conceal;
+	} else {
+		return color::fg;
+	}
+}
+
+void draw(App &app, Shapes &shapes) {
+  void *pixels;
+  int pitch;
+  int w = app.video.w_pixels;
+  int h = app.video.h_pixels;
+
+  if (SDL_LockTexture(app.video.window_texture, NULL, &pixels, &pitch)) {
+    uint32_t *pixels_locked = (uint32_t *)pixels;
+    std::fill_n((uint32_t *)pixels, app.video.w_pixels * app.video.h_pixels,
+                color::bg);
+
+    // [draw all finished shapes]
+    for (const auto &line : shapes.lines) {
+      rasterize::line(pixels_locked, w, h, line.geom, get_color(shapes, line));
+    }
+    for (const auto &circle : shapes.circles) {
+      rasterize::circle(pixels_locked, w, h, circle.geom,
+                        get_color(shapes, circle));
+    }
+    for (const auto &arc : shapes.arcs) {
+      rasterize::arc(pixels_locked, w, h, arc.geom, get_color(shapes, arc));
+    }
+
+    // draw circle around snap point
+    if (shapes.snap.shape != SnapShape::NONE) {
+      rasterize::circle(pixels_locked, w, h,
+                        Circle2{shapes.snap.point, shapes.snap.distance},
+                        color::fg);
+    }
+
+    // draw circle around hl_secondary ixn_points
+    for (const auto &ixn_point : shapes.ixn_points) {
+      if (ixn_point.tflags.hl_secondary) {
+        rasterize::circle(pixels_locked, w, h,
+                          Circle2{ixn_point.P, shapes.snap.distance},
+                          get_color(shapes, ixn_point));
+      }
+    }
+
+    // draw circle around  def_points
+    for (const auto &def_point : shapes.def_points) {
+      rasterize::circle(pixels_locked, w, h,
+                        Circle2{def_point.P, shapes.snap.distance / 3.0},
+                        get_color(shapes, def_point));
+    }
+    // draw circle around  ixn_points
+    for (const auto &ixn_point : shapes.ixn_points) {
+      rasterize::circle(pixels_locked, w, h,
+                        Circle2{ixn_point.P, shapes.snap.distance / 3.0},
+                        get_color(shapes, ixn_point));
+    }
+
+    // [draw the temporary shape from base to cursor live if in construction]
+    if (shapes.construct.shape == ConstructShape::LINE) {
+      rasterize::line(pixels_locked, w, h, shapes.construct.line.geom,
+                      get_color(shapes, shapes.construct.line));
+    }
+    if (shapes.construct.shape == ConstructShape::CIRCLE) {
+      rasterize::circle(pixels_locked, w, h, shapes.construct.circle.geom,
+                        get_color(shapes, shapes.construct.circle));
+    }
+    if (shapes.construct.shape == ConstructShape::ARC) {
+      if (shapes.construct.point_set == PointSet::SECOND) {
+        rasterize::arc(pixels_locked, w, h, shapes.construct.arc.geom,
+                       get_color(shapes, shapes.construct.arc));
+      } else {
+        rasterize::line(
+            pixels_locked, w, h,
+            Line2{shapes.construct.arc.geom.C, shapes.construct.arc.geom.S},
+            get_color(shapes, shapes.construct.arc));
+      }
+    }
+
+    // [draw the edit shape from base to cursor live if in construction]
+    if (shapes.edit.in_edit) {
+      if (shapes.edit.shape == EditShape::LINE) {
+				rasterize::line(pixels_locked, w, h, shapes.edit.line.geom,
+                  get_color(shapes, shapes.construct.line));
+      }
+    }
+    SDL_UnlockTexture(app.video.window_texture);
+  }
+  SDL_RenderTexture(app.video.renderer, app.video.window_texture, NULL, NULL);
+  SDL_RenderPresent(app.video.renderer);
+  // auto t1 = std::chrono::high_resolution_clock::now();
+	// auto t2 = std::chrono::high_resolution_clock::now();
+  // std::chrono::duration<double, std::milli> dt_ms = t2 - t1;
+  // std::cout << "dt_out: " << dt_ms << std::endl;
 }
 
 void check_for_changes(App &app, Shapes &shapes) {

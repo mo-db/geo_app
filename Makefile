@@ -6,9 +6,8 @@
 
 ## BASE VARS
 REPO_PATH := /Users/moritz/Repos/geoVT/
-# SRC_NAMES := main graphics gen draw shapes serialize
-SRC_NAMES := testudp
-SRC_DIR := src2
+SRC_NAMES := main graphics gen rasterize shapes serialize debug
+SRC_DIR := app_v2
 OBJ_DIR := obj
 BIN_DIR := bin
 
