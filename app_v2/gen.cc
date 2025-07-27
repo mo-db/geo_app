@@ -374,4 +374,102 @@ void calculate_relations(Shapes &shapes, GenShapes &gen_shapes,
 	}
 }
 
+
+
+vector<double> line_len_ratios(Shapes &shapes, Line &line) {
+	// variables
+	vector<double> distances{};
+	vector<double> lengths{};
+
+	Vec2 A = line.geom.A;
+	Vec2 B {};
+	if (util::epsilon_equal(A.x, line.geom.A.x) &&
+			util::epsilon_equal(A.y, line.geom.A.y)) {
+		B = line.geom.B;
+	} else {
+		B = line.geom.A;
+	}
+	double max_distance = (vec2::distance(A, B));
+
+	distances.push_back(0.0);
+	distances.push_back(max_distance);
+
+	// add distances between start_point and ixn_points to distances vector
+	for (auto &ixn_point : shapes.ixn_points) {
+		if (!ixn_point.pflags.concealed &&
+				std::any_of(ixn_point.ids.begin(), ixn_point.ids.end(),
+										[&](const auto &id) { return id == line.id; })) {
+			double distance = vec2::distance(A, ixn_point.P);
+			// filter out start and end point distances
+			if (!util::epsilon_equal(max_distance, distance) && distance > gk::epsilon) {
+				distances.push_back(vec2::distance(A, ixn_point.P));
+			}
+		}
+	}
+
+	// sort distances ascending
+	sort(distances.begin(), distances.end(),
+			 [](double v1, double v2) { return v1 < v2; });
+
+	// create lengths
+	for (int i = 0; i < int((distances.size() - 1)); i++) {
+		lengths.push_back(distances[i+1] - distances[i]);
+	}
+
+	// normalize against unity shape
+	for (auto &length : lengths) {
+		length /= shapes.unity.value;
+	}
+
+#define debug
+#ifdef debug
+	// info print
+	cout << "unity value: " << shapes.unity.value << endl;
+	cout << "distances: ";
+	for (double distance : distances) {
+			std::cout << distance << " ";
+	}
+	std::cout << std::endl;
+	cout << "max distance: " << max_distance << endl;
+	cout << "start point: " << A.x << "," << A.y << endl;
+	cout << "end point: " << B.x << "," << B.y << endl;
+#endif
+
+	return lengths;
+}
+
+
+void calculate_len_ratios(Shapes &shapes, std::ofstream &file_out) {
+	std::vector<double> length_ratios_temp{};
+	std::vector<double> length_ratios_final{};
+	bool dup;
+
+	for (auto line: shapes.lines) {
+		if (line.tflags.selected) {
+			length_ratios_temp = gen::line_len_ratios(shapes, line);
+
+			for (auto &ratio_temp : length_ratios_temp) {
+				dup = false;
+				for (auto &ratio_final : length_ratios_final) {
+					if (util::epsilon_equal(ratio_final, ratio_temp)) {
+						dup = true;
+					}
+				}
+				if (!dup) {
+					length_ratios_final.push_back(ratio_temp);
+				}
+			}
+		}
+	}
+	// sort distances ascending
+	sort(length_ratios_final.begin(), length_ratios_final.end(),
+			 [](double v1, double v2) { return v1 < v2; });
+
+	for (auto &ratio_final : length_ratios_final) {
+		file_out << ratio_final << " ";
+		cout << ratio_final << ", ";
+	}
+	cout << endl;
+}
+
 } // namespace gen

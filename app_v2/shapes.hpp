@@ -111,6 +111,13 @@ struct Ref {
 	double value {};
 };
 
+enum struct UnityShape{ NONE, LINE, CIRCLE, ARC, };
+struct Unity {
+	UnityShape shape = UnityShape::NONE;
+	int id {-1};
+	double value {};
+};
+
 enum struct SnapShape { NONE, IXN_POINT, DEF_POINT, LINE, CIRCLE, ARC, };
 struct Snap {
 	static constexpr double distance = 20.0;
@@ -139,6 +146,7 @@ struct Shapes {
 	Construct construct;
 	Edit edit;
 	Ref ref;
+	Unity unity;
 	Snap snap;
 
 	void push_ixn(Node ixn_point) { ixn_point.id = id_counter++; ixn_points.push_back(ixn_point); }
@@ -188,6 +196,7 @@ void update_edit(const App &app, Shapes &shapes);
 // copy (shape determined) parameter to ref_variable
 // on drawing check if id = ref_id -> change color
 void maybe_select_ref(App &app, Shapes &shapes);
+void maybe_select_unity(App &app, Shapes &shapes);
 
 // functions for snapping
 bool update_snap(const App &app, Shapes &shapes);

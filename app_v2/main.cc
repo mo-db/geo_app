@@ -72,6 +72,16 @@ int main() {
 					gen::maybe_select(shapes, gen_shapes);
 				}
 				break;
+			case AppMode::UNITY:
+				if (shapes.snap.in_distance && app.input.mouse_click) {
+					if (app.input.shift_set) {
+						shapes::toggle_select(app, shapes);
+					}
+					if (app.input.ctrl_set) {
+						shapes::maybe_select_unity(app, shapes);
+					}
+				}
+				break;
 		}
 
 		draw(app, shapes);
@@ -200,6 +210,11 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 							case AppMode::GEN:
 								gen::reset(shapes, gen_shapes);
 								break;
+							case AppMode::UNITY:
+								shapes::clear_tflags_global(shapes);
+								shapes.unity.shape = UnityShape::NONE;
+								shapes.unity.id = -1;
+								break;
 						}
           }
           break;
@@ -245,6 +260,14 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
             app.context.mode = AppMode::LINE;
           }
           break;
+
+					// TODO new stuff
+				case SDLK_J:
+          if (!event.key.repeat) {
+						mode_change_cleanup(app, shapes, gen_shapes);
+            app.context.mode = AppMode::UNITY;
+          }
+          break;
 				case SDLK_G:
           if (!event.key.repeat) {
 						mode_change_cleanup(app, shapes, gen_shapes);
@@ -278,6 +301,13 @@ void process_events(App &app, Shapes &shapes, GenShapes &gen_shapes) {
 					if (!event.key.repeat) {
 						std::ofstream outf{ "Sample.txt" };
 						gen::calculate_relations(shapes, gen_shapes, outf);
+					}
+					break;
+					// TODO new stuff
+				case SDLK_M:
+					if (!event.key.repeat) {
+						std::ofstream outf{ "Sample.txt" };
+						gen::calculate_len_ratios(shapes, outf);
 					}
 					break;
 				case SDLK_P:
@@ -447,6 +477,11 @@ uint32_t get_color(const Shapes& shapes, const Shape &shape) {
 	if (shapes.ref.shape != RefShape::NONE && shape.id == shapes.ref.id) {
 		return color::special;
 	}
+
+	if (shapes.unity.shape != UnityShape::NONE && shape.id == shapes.unity.id) {
+		return color::hl_secondary;
+	}
+
 	// return color hirachical
 	if (shape.tflags.selected) {
 		return color::select; 

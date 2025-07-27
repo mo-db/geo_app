@@ -57,6 +57,12 @@ std::vector<double> arc_relations(Shapes &shapes, GenArc &gen);
 void calculate_relations(Shapes &shapes, GenShapes &gen_shapes,
                          std::ofstream &file_out);
 
+
+
+vector<double> line_len_ratios(Shapes &shapes, Line &line);
+void calculate_len_ratios(Shapes &shapes, std::ofstream &file_out);
+
+
 // reset origin and others
 void reset(Shapes &shapes, GenShapes &gen_shapes);
 // clear gen shapes

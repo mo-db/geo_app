@@ -468,6 +468,39 @@ void maybe_select_ref(App &app, Shapes &shapes) {
 	}
 }
 
+void maybe_select_unity(App &app, Shapes &shapes) {
+	if (shapes.snap.shape == SnapShape::LINE) {
+		auto &line = shapes.get_line_by_index(shapes.snap.index);
+		if (shapes.unity.id == line.id) {
+			shapes.unity.shape = UnityShape::NONE;
+		} else {
+			shapes.unity.shape = UnityShape::LINE;
+			shapes.unity.value = line.geom.length();
+			shapes.unity.id = line.id;
+		}
+	}
+	if (shapes.snap.shape == SnapShape::CIRCLE) {
+		auto &circle = shapes.get_circle_by_index(shapes.snap.index);
+		if (shapes.unity.id == circle.id) {
+			shapes.unity.shape = UnityShape::NONE;
+		} else {
+			shapes.unity.shape = UnityShape::CIRCLE;
+			shapes.unity.value = circle.geom.radius() * 2.0;
+			shapes.unity.id = circle.id;
+		}
+	}
+	if (shapes.snap.shape == SnapShape::ARC) {
+		auto &arc = shapes.get_arc_by_index(shapes.snap.index);
+		if (shapes.unity.id == arc.id) {
+			shapes.unity.shape = UnityShape::NONE;
+		} else {
+			shapes.unity.shape = UnityShape::ARC;
+			shapes.unity.value = arc.geom.radius() * 2.0;
+			shapes.unity.id = arc.id;
+		}
+	}
+}
+
 void push_edit(Shapes &shapes) {
 	if (shapes.edit.in_edit) {
 		if (shapes.edit.shape == EditShape::LINE) {
