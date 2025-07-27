@@ -5,10 +5,10 @@
 # to add libraries edit EXT_LIBS variable - can also be empty
 
 ## BASE VARS
-SRC_NAMES := main
-SRC_DIR := soa_testing
-#SRC_NAMES := main graphics gen draw shapes serialize
-#SRC_DIR := src2
+REPO_PATH := /Users/moritz/Repos/geoVT/
+# SRC_NAMES := main graphics gen draw shapes serialize
+SRC_NAMES := testudp
+SRC_DIR := src2
 OBJ_DIR := obj
 BIN_DIR := bin
 
@@ -23,7 +23,7 @@ OBJ_FILES := $(addprefix $(OBJ_DIR)/, $(addsuffix .o, $(SRC_NAMES)))
 ASM_FILES := $(addprefix $(OBJ_DIR)/, $(addsuffix .s, $(SRC_NAMES)))
 
 ## FLAGS
-BASE_FLAGS := -std=c++23 -I$(SRC_DIR)
+BASE_FLAGS := -std=c++23 -I$(REPO_PATH)$(SRC_DIR)
 
 # Create dependency files 
 # If header changes, trigger recompilation of dependent source files

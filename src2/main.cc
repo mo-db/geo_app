@@ -6,6 +6,10 @@
 #include "gen.hpp"
 #include "serialize.hpp"
 
+// Define this before including asio if you're not using Boost:
+#define ASIO_STANDALONE
+#include "asio.hpp"
+
 constexpr const int gk_window_width = 1920/2;
 constexpr int gk_window_height = 1080/2;
 
