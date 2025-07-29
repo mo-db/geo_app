@@ -6,8 +6,8 @@
 
 ## BASE VARS
 REPO_PATH := /Users/moritz/Repos/geoVT/
-SRC_NAMES := main graphics gen rasterize shapes serialize debug
-SRC_DIR := app_v2
+SRC_NAMES := main app graphics rasterize turtle
+SRC_DIR := models
 OBJ_DIR := obj
 BIN_DIR := bin
 
